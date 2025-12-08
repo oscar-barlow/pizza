@@ -1,5 +1,5 @@
 defmodule Pizza.Ports do
-  alias Pizza.Core.Pizza
+  alias Pizza.Event.PizzaEvent
 
   defmodule Cli do
     @callback parse(command: list(String.t())) ::
@@ -10,7 +10,7 @@ defmodule Pizza.Ports do
     @type config :: term()
 
     @callback migrate(term()) :: :ok | {:error, :migrations_error}
-    @callback store(term(), Pizza.t()) :: {:ok, Pizza.t()} | {:error, :write_error, String.t()}
+    @callback store(term(), PizzaEvent.t()) :: {:ok, String.t()} | {:error, :write_error, String.t()}
   end
 
   defmodule PizzaProjectionRepository do
