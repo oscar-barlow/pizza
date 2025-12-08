@@ -1,0 +1,24 @@
+{
+  "table_name": "pizza_events",
+  "attribute_definitions": [
+    {
+      "attribute_name": "StreamId",
+      "attribute_type": "S"
+    },
+    {
+      "attribute_name": "Version",
+      "attribute_type": "N"
+    }
+  ],
+  "key_schema": [
+    {
+      "attribute_name": "StreamId",
+      "key_type": "HASH"
+    },
+    {
+      "attribute_name": "Version",
+      "key_type": "RANGE"
+    }
+  ],
+  "billing_mode": "PAY_PER_REQUEST"
+}

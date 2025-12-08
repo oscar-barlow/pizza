@@ -1,18 +1,19 @@
-defmodule Pizza do
-  @moduledoc """
-  Documentation for `Pizza`.
-  """
+defmodule Pizza.Main do
+  alias Pizza.Adapters.Cli
+  alias Pizza.Adapters.EventRepository
 
-  @doc """
-  Hello world.
+  def main(args \\ []) do
+    event_repository = EventRepository.default()
+    EventRepository.migrate(event_repository)
 
-  ## Examples
+    args
+    |> parse
+    |> IO.puts()
+  end
 
-      iex> Pizza.hello()
-      :world
-
-  """
-  def hello do
-    :world
+  defp parse(args) do
+    {_, command, _} = args |> OptionParser.parse()
+    {:ok, out} = Cli.parse(command)
+    out
   end
 end
