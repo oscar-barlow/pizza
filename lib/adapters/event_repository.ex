@@ -1,7 +1,7 @@
 defmodule Pizza.Adapters.EventRepository do
   @behaviour Pizza.Ports.EventRepository
 
-  alias Pizza.Event.PizzaEvent
+  alias Pizza.Event.CloudEvent
 
   defstruct [:client]
 
@@ -29,17 +29,26 @@ defmodule Pizza.Adapters.EventRepository do
       billing_mode = convert_billing_mode(raw_billing_mode)
 
       opts = [billing_mode: billing_mode]
-      client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request
-
+      client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request()
     else
       {:error, _} -> {:error, :migrations_error}
     end
   end
 
   @impl true
-  def store(%__MODULE__{} = _repo, %PizzaEvent{} = pizza_event) do
-    {:ok, pizza_event.id}
-    # to do - save pizza event
+  def store(%__MODULE__{client: client} = _repo, %CloudEvent{} = event) do
+    with {:ok, json} <- Jason.encode(event),
+         {:ok, item} <- Jason.decode(json),
+         {:ok, _} <- client.put_item("events", item) |> ExAws.request() do
+      :ok
+    else
+      {:error, _} -> {:error, :write_error}
+    end
+  end
+
+  def get_event(%__MODULE__{client: client} = _repo, id) do
+    event = client.get_item("events", id)
+    {:ok, event}
   end
 
   defp convert_attribute_definitions(raw_defs) do

@@ -1,9 +1,6 @@
 defmodule Pizza.Adapters.Cli do
   @behaviour Pizza.Ports.Cli
 
-  alias Pizza.Adapters.EventRepository
-  alias Pizza.Core.Pizza
-
   @impl true
   def parse(command) do
     command
@@ -11,15 +8,14 @@ defmodule Pizza.Adapters.Cli do
   end
 
   defp run(["list"]) do
+    {:error, "Not implemented"}
   end
 
-  defp run(["save" | pizza]) do
-    event_repository = EventRepository.default()
+  defp run(["save" | _pizza]) do
+    {:error, "Not implemented"}
+  end
 
-    with price <- String.to_float(tl(pizza)),
-         {:ok, p} <- Pizza.new(pizza -- [price], price),
-         {:ok, stored} <- EventRepository.store(event_repository, p) do
-      {:ok, stored}
-    end
+  defp run(_) do
+    {:error, "Unknown command"}
   end
 end

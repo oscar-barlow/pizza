@@ -1,5 +1,6 @@
 defmodule Pizza.Ports do
-  alias Pizza.Event.PizzaEvent
+  alias Pizza.Core.Pizza
+  alias Pizza.Event.CloudEvent
 
   defmodule Cli do
     @callback parse(command: list(String.t())) ::
@@ -10,7 +11,8 @@ defmodule Pizza.Ports do
     @type config :: term()
 
     @callback migrate(term()) :: :ok | {:error, :migrations_error}
-    @callback store(term(), PizzaEvent.t()) :: {:ok, String.t()} | {:error, :write_error, String.t()}
+    @callback store(term(), CloudEvent.t()) :: {:ok, String.t()} | {:error, :write_error}
+    @callback get_event(term(), String.t()) :: {:ok, CloudEvent.t()} | {:error, :read_error}
   end
 
   defmodule PizzaProjectionRepository do

@@ -2,7 +2,7 @@ defmodule Pizza.Adapters.EventRepositoryTest do
   use ExUnit.Case
 
   alias Pizza.Adapters.EventRepository
-  alias Pizza.Event.PizzaEvent
+  alias Pizza.Event.CloudEvent
   alias Pizza.Core.Pizza
 
   setup do
@@ -11,24 +11,37 @@ defmodule Pizza.Adapters.EventRepositoryTest do
     Test.RepositoryHelper.clear_tables()
 
     with {:ok, pizza} <- Pizza.new("margherita", 7.5) do
-      pizza_event =
-        PizzaEvent.new_with_id_and_timestamp(
+      time = DateTime.utc_now()
+      cloud_event =
+        CloudEvent.new_v1(
           :test,
-          "1.0",
           :create_pizza,
-          pizza
+          time,
+          pizza,
+          1
         )
-        {:ok, event_repository: event_repository, pizza_event: pizza_event}
+        {:ok, event_repository: event_repository, pizza: pizza, cloud_event: cloud_event, time: time}
     end
   end
 
   test "should store a pizza creation event", %{
     event_repository: event_repository,
-    pizza_event: pizza_event
+    pizza: pizza,
+    cloud_event: cloud_event,
+    time: time
   } do
-    EventRepository.store(event_repository, pizza_event)
+    EventRepository.store(event_repository, cloud_event)
 
-    # assert pizza events table contains 1 item
-    EventRepository.get_event(event_repository, pizza_event.id)
+    event = EventRepository.get_event(event_repository, cloud_event.id)
+    assert event == %CloudEvent{
+      id: "pizza-#{pizza.id}",
+      stream_id: "pizza-#{pizza.id}",
+      version: 1,
+      source: :test,
+      specversion: "1.0",
+      type: :create_pizza,
+      time: time,
+      data: pizza
+    }
   end
 end
