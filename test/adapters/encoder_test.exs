@@ -2,12 +2,15 @@ defmodule Pizza.Adapters.EncoderTest do
   use ExUnit.Case, async: true
 
   alias Pizza.Adapters.Encoder
-  alias Pizza.Core.Pizza, as: CorePizza
   alias Pizza.Event.CloudEvent
 
+  setup do
+    pizza = %Pizza.Core.Pizza{id: "123", name: "margherita", price: 7.5}
+    {:ok, pizza: pizza}
+  end
+
   describe "encoding cloud events" do
-    test "produces a Dynamo-friendly map" do
-      pizza = %CorePizza{id: "123", name: "margherita", price: 7.5}
+    test "produces a Dynamo-friendly map", %{pizza: pizza} do
       time = DateTime.utc_now()
 
       event = CloudEvent.new_v1(:cli, :create_pizza, time, pizza, 1)
@@ -27,9 +30,9 @@ defmodule Pizza.Adapters.EncoderTest do
   end
 
   describe "decoding cloud events" do
-    test "reconstructs the original CloudEvent" do
+    test "reconstructs the original CloudEvent", %{pizza: pizza} do
       time = DateTime.utc_now() |> DateTime.truncate(:second)
-      pizza = %CorePizza{id: "123", name: "margherita", price: 7.5}
+      pizza = %Pizza.Core.Pizza{id: "123", name: "margherita", price: 7.5}
       event = CloudEvent.new_v1(:cli, :create_pizza, time, pizza, 1)
 
       payload = Encoder.encode_cloud_event(event)
