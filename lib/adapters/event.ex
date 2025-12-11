@@ -26,7 +26,7 @@ defmodule Pizza.Event do
             data: term()
           }
 
-    def new_v1(source, type, time, data, version) do
+    def new_v1(source, type, %DateTime{} = time, data, version) do
       specversion = "1.0"
       stream_id = get_stream_id(data)
 
@@ -40,6 +40,10 @@ defmodule Pizza.Event do
         time: time,
         data: data
       }
+    end
+
+    def new_v1(_source, _type, _time, _data, _version) do
+      raise ArgumentError, "cloud events require DateTime timestamps"
     end
 
     defp get_stream_id(%{id: id} = data) do

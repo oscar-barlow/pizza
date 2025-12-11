@@ -12,7 +12,8 @@ defmodule Pizza.Ports do
 
     @callback migrate(term()) :: :ok | {:error, :migrations_error}
     @callback store(term(), CloudEvent.t()) :: {:ok, String.t()} | {:error, :write_error}
-    @callback get_event(term(), String.t()) :: {:ok, CloudEvent.t()} | {:error, :read_error}
+    @callback get_event(term(), String.t(), pos_integer()) ::
+                {:ok, CloudEvent.t()} | {:error, :not_found | :read_error}
   end
 
   defmodule PizzaProjectionRepository do

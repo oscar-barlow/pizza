@@ -1,85 +1,116 @@
 defmodule Pizza.Adapters.EventRepository do
   @behaviour Pizza.Ports.EventRepository
 
+  alias Pizza.Adapters.{Dynamo, Encoder}
   alias Pizza.Event.CloudEvent
+  require Logger
 
   defstruct [:client]
 
   @type t :: %__MODULE__{client: module()}
 
-  def default do
+  @events_table "events"
+
+  def default() do
     %__MODULE__{client: ExAws.Dynamo}
   end
 
   @impl true
   def migrate(%__MODULE__{client: client} = _repo) do
-    migration_name = "V1__create_events_table.json"
+    migration_name = "V1_1__create_events_table.json"
     migration_path = Path.join(:code.priv_dir(:pizza), "migrations/#{migration_name}")
 
+    Logger.info("[EventRepository] loading migration from #{migration_path}")
+
     with {:ok, content} <- File.read(migration_path),
+         _ <- Logger.debug("[EventRepository] migration file read successfully"),
          {:ok, table_def} <- Jason.decode(content, keys: :atoms),
+         _ <- Logger.debug("[EventRepository] migration JSON decoded"),
          %{
            table_name: table_name,
            attribute_definitions: raw_attr_defs,
            key_schema: raw_key_schema,
            billing_mode: raw_billing_mode
          } <- table_def do
-      attr_defs = convert_attribute_definitions(raw_attr_defs)
-      key_schema = convert_key_schema(raw_key_schema)
-      billing_mode = convert_billing_mode(raw_billing_mode)
+      Logger.debug("[EventRepository] applying migration to table #{table_name}")
+      attr_defs = Dynamo.convert_attribute_definitions(raw_attr_defs)
+      key_schema = Dynamo.convert_key_schema(raw_key_schema)
+      billing_mode = Dynamo.convert_billing_mode(raw_billing_mode)
 
       opts = [billing_mode: billing_mode]
-      client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request()
+      case client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request() do
+        {:ok, _} ->
+          Logger.debug("[EventRepository] table #{table_name} created, waiting for ACTIVE state")
+          wait_for_table(client, table_name)
+
+        {:error, {"ResourceInUseException", _}} ->
+          Logger.debug("[EventRepository] table #{table_name} already exists, ensuring ACTIVE state")
+          wait_for_table(client, table_name)
+
+        {:error, reason} ->
+          Logger.error("[EventRepository] failed to create table #{table_name}: #{inspect(reason)}")
+          {:error, :migrations_error}
+      end
     else
-      {:error, _} -> {:error, :migrations_error}
+      {:error, reason} ->
+        Logger.error("[EventRepository] migration failed: #{inspect(reason)}")
+        {:error, :migrations_error}
+    end
+  end
+
+
+  @impl true
+  def store(%__MODULE__{client: client} = _repo, %CloudEvent{} = event) do
+    item = Encoder.encode_cloud_event(event)
+
+    case client.put_item(@events_table, item) |> ExAws.request() do
+      {:ok, _} -> {:ok, event.id}
+      {:error, reason} -> {:error, {:write_error, reason}}
     end
   end
 
   @impl true
-  def store(%__MODULE__{client: client} = _repo, %CloudEvent{} = event) do
-    with {:ok, json} <- Jason.encode(event),
-         {:ok, item} <- Jason.decode(json),
-         {:ok, _} <- client.put_item("events", item) |> ExAws.request() do
-      :ok
-    else
-      {:error, _} -> {:error, :write_error}
+  def get_event(%__MODULE__{client: client} = _repo, stream_id, version)
+      when is_binary(stream_id) and is_integer(version) and version > 0 do
+    key = %{"StreamId" => stream_id, "Version" => version}
+
+    case client.get_item(@events_table, key) |> ExAws.request() do
+      {:ok, %{"Item" => %{} = item}} when map_size(item) == 0 ->
+        {:error, :not_found}
+
+      {:ok, %{"Item" => item}} ->
+        item
+        |> ExAws.Dynamo.Decoder.decode()
+        |> Encoder.decode_cloud_event()
+
+      {:ok, %{}} ->
+        {:error, :not_found}
+
+      {:error, _} ->
+        {:error, :read_error}
     end
   end
 
-  def get_event(%__MODULE__{client: client} = _repo, id) do
-    event = client.get_item("events", id)
-    {:ok, event}
+  defp wait_for_table(client, table_name), do: wait_for_table(client, table_name, 10, 100)
+
+  defp wait_for_table(_client, _table_name, 0, _delay), do: {:error, :migrations_error}
+
+  defp wait_for_table(client, table_name, attempts, delay) do
+    case client.describe_table(table_name) |> ExAws.request() do
+      {:ok, %{"Table" => %{"TableStatus" => "ACTIVE"}}} -> :ok
+
+      {:ok, _} ->
+        Process.sleep(delay)
+        wait_for_table(client, table_name, attempts - 1, next_delay(delay))
+
+      {:error, {"ResourceNotFoundException", _}} ->
+        Process.sleep(delay)
+        wait_for_table(client, table_name, attempts - 1, next_delay(delay))
+
+      {:error, _} ->
+        {:error, :migrations_error}
+    end
   end
 
-  defp convert_attribute_definitions(raw_defs) do
-    Enum.map(raw_defs, fn %{attribute_name: name, attribute_type: type} ->
-      {String.to_atom(name), aws_type_to_dynamo_type(type)}
-    end)
-  end
-
-  defp convert_key_schema(raw_schema) do
-    Enum.map(raw_schema, fn %{attribute_name: name, key_type: type} ->
-      {String.to_atom(name), aws_key_type_to_atom(type)}
-    end)
-  end
-
-  defp convert_billing_mode(raw_mode) do
-    raw_mode
-    |> String.downcase()
-    |> String.to_atom()
-  end
-
-  defp aws_type_to_dynamo_type("S"), do: :string
-  defp aws_type_to_dynamo_type("N"), do: :number
-  defp aws_type_to_dynamo_type("B"), do: :blob
-  defp aws_type_to_dynamo_type("SS"), do: :string_set
-  defp aws_type_to_dynamo_type("NS"), do: :number_set
-  defp aws_type_to_dynamo_type("BS"), do: :blob_set
-  defp aws_type_to_dynamo_type("BOOL"), do: :boolean
-  defp aws_type_to_dynamo_type("NULL"), do: :null
-  defp aws_type_to_dynamo_type("L"), do: :list
-  defp aws_type_to_dynamo_type("M"), do: :map
-
-  defp aws_key_type_to_atom("HASH"), do: :hash
-  defp aws_key_type_to_atom("RANGE"), do: :range
+  defp next_delay(delay), do: min(delay + 100, 1_000)
 end
