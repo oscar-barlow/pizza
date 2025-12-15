@@ -16,13 +16,18 @@ defmodule Pizza.Adapters.EventRepository do
   end
 
   @impl true
-  def migrate(%__MODULE__{client: client} = _repo) do
-    migration_name = "V1_1__create_events_table.json"
-    migration_path = Path.join(:code.priv_dir(:pizza), "migrations/#{migration_name}")
+  def migrate((%__MODULE__{} = repo)) do
+    :code.priv_dir(:pizza)
+    |> Path.join("migrations/**.json")
+    |> Path.wildcard()
+    |> Enum.each(&perform_migration(repo, &1))
+    :ok
+  end
 
-    Logger.info("[EventRepository] loading migration from #{migration_path}")
+  def perform_migration(%__MODULE__{client: client} = _repo, migration) do
+    Logger.info("[EventRepository] loading migration from #{migration}")
 
-    with {:ok, content} <- File.read(migration_path),
+    with {:ok, content} <- File.read(migration),
          _ <- Logger.debug("[EventRepository] migration file read successfully"),
          {:ok, table_def} <- Jason.decode(content, keys: :atoms),
          _ <- Logger.debug("[EventRepository] migration JSON decoded"),
@@ -97,17 +102,22 @@ defmodule Pizza.Adapters.EventRepository do
 
   defp wait_for_table(client, table_name, attempts, delay) do
     case client.describe_table(table_name) |> ExAws.request() do
-      {:ok, %{"Table" => %{"TableStatus" => "ACTIVE"}}} -> :ok
+      {:ok, %{"Table" => %{"TableStatus" => "ACTIVE"}}} ->
+        Logger.info("Table with name '#{table_name}' active")
+        :ok
 
       {:ok, _} ->
         Process.sleep(delay)
+        Logger.info("Table #{table_name} not active yet")
         wait_for_table(client, table_name, attempts - 1, next_delay(delay))
 
       {:error, {"ResourceNotFoundException", _}} ->
+        Logger.warning("Table with name '#{table_name}' not found")
         Process.sleep(delay)
         wait_for_table(client, table_name, attempts - 1, next_delay(delay))
 
       {:error, _} ->
+        Logger.error("Error migrating table with name '#{table_name}'")
         {:error, :migrations_error}
     end
   end
