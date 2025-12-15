@@ -26,7 +26,7 @@ defmodule Pizza.Event do
             data: term()
           }
 
-    def new_v1(source, type, %DateTime{} = time, data, version) do
+    def new_v1(source, type, %DateTime{} = time, data, version) when is_integer(version) and version > 0 do
       specversion = "1.0"
       stream_id = get_stream_id(data)
 
@@ -40,6 +40,10 @@ defmodule Pizza.Event do
         time: time,
         data: data
       }
+    end
+
+    def new_v1(_source, _type, %DateTime{} = _time, _data, _version) do
+      raise ArgumentError, "cloud events require positive integer versions"
     end
 
     def new_v1(_source, _type, _time, _data, _version) do
@@ -57,28 +61,3 @@ defmodule Pizza.Event do
     end
   end
 end
-
-# defimpl ExAws.Dynamo.Encodable, for: Pizza.Event.CloudEvent do
-#   def encode(%Pizza.Event.CloudEvent{} = event, _opts) do
-#     %{
-#       "id" => event.id,
-#       "stream_id" => event.stream_id,
-#       "version" => event.version,
-#       "source" => Atom.to_string(event.source),
-#       "specversion" => event.specversion,
-#       "type" => Atom.to_string(event.type),
-#       "time" => event.time,
-#       "data" => event.data
-#     }
-#   end
-# end
-
-# defimpl ExAws.Dynamo.Encodable, for: Pizza.Core.Pizza do
-#   def encode(%Pizza.Core.Pizza{id: id, name: name, price: price} = _pizza, _opts) do
-#     %{
-#       "id" => id,
-#       "name" => name,
-#       "price" => price
-#     }
-#   end
-# end

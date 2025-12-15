@@ -98,8 +98,6 @@ defmodule Pizza.Adapters.EventRepository do
 
   defp wait_for_table(client, table_name), do: wait_for_table(client, table_name, 10, 100)
 
-  defp wait_for_table(_client, _table_name, 0, _delay), do: {:error, :migrations_error}
-
   defp wait_for_table(client, table_name, attempts, delay) do
     case client.describe_table(table_name) |> ExAws.request() do
       {:ok, %{"Table" => %{"TableStatus" => "ACTIVE"}}} ->

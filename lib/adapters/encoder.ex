@@ -1,10 +1,3 @@
-defmodule Pizza.Adapters.JsonEncoders do
-  alias Pizza.Core.Pizza
-  require Protocol
-
-  Protocol.derive(Jason.Encoder, Pizza, only: [:id, :name, :price])
-end
-
 defmodule Pizza.Adapters.Encoder do
   alias Pizza.Event.CloudEvent
 
@@ -16,8 +9,8 @@ defmodule Pizza.Adapters.Encoder do
       "Source" => Atom.to_string(event.source),
       "SpecVersion" => event.specversion,
       "Type" => Atom.to_string(event.type),
-      "Time" => encode_time(event.time),
-      "Data" => encode_data(event.data)
+      "Time" => DateTime.to_iso8601(event.time),
+      "Data" => encode(event.data)
     }
   end
 
@@ -32,15 +25,16 @@ defmodule Pizza.Adapters.Encoder do
         "Data" => data
       }) do
     with {:ok, decoded_time} <- decode_time(time),
-         {:ok, decoded_data} <- decode_data(data) do
+         {:ok, decoded_data} <- decode(data),
+         {:ok, normalised_version} <- normalise_version(version) do
       {:ok,
        %CloudEvent{
          id: id,
          stream_id: stream_id,
-         version: normalize_version(version),
-         source: decode_atom(source),
+         version: normalised_version,
+         source: String.to_existing_atom(source),
          specversion: spec_version,
-         type: decode_atom(type),
+         type: String.to_existing_atom(type),
          time: decoded_time,
          data: decoded_data
        }}
@@ -51,9 +45,6 @@ defmodule Pizza.Adapters.Encoder do
 
   def decode_cloud_event(_), do: {:error, :read_error}
 
-  defp encode_time(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
-  defp encode_time(_), do: raise(ArgumentError, "Cloud events must carry DateTime structs")
-
   defp decode_time(value) when is_binary(value) do
     case DateTime.from_iso8601(value) do
       {:ok, datetime, _offset} -> {:ok, datetime}
@@ -61,40 +52,25 @@ defmodule Pizza.Adapters.Encoder do
     end
   end
 
-  defp decode_time(_), do: {:error, :invalid_time}
+  defp normalise_version(version) when is_integer(version), do: {:ok, version}
 
-  defp encode_data(%Pizza.Core.Pizza{id: id, name: name, price: price}) do
+  defp normalise_version(version) when is_binary(version) do
+    case Integer.parse(version) do
+      {parsed, ""} -> {:ok, parsed}
+      _ -> {:error, :invalid_version}
+    end
+  end
+
+  defp normalise_version(_), do: {:error, :invalid_version}
+
+  defp encode(%Pizza.Core.Pizza{id: id, name: name, price: price}) do
     %{"id" => id, "name" => name, "price" => price}
   end
 
-  defp encode_data(value), do: value
-
-  defp decode_data(%{"id" => id, "name" => name, "price" => price}) do
+  defp decode(%{"id" => id, "name" => name, "price" => price}) do
     {:ok, %Pizza.Core.Pizza{id: id, name: name, price: price}}
   end
 
-  defp decode_data(value), do: {:ok, value}
+  defp decode(_), do: {:error, :invalid_data}
 
-  defp decode_atom(value) when is_atom(value), do: value
-
-  defp decode_atom(value) when is_binary(value) do
-    try do
-      String.to_existing_atom(value)
-    rescue
-      ArgumentError -> String.to_atom(value)
-    end
-  end
-
-  defp decode_atom(value), do: value
-
-  defp normalize_version(value) when is_integer(value), do: value
-
-  defp normalize_version(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {int, _} -> int
-      _ -> value
-    end
-  end
-
-  defp normalize_version(value), do: value
 end
