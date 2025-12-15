@@ -7,7 +7,7 @@ defmodule Pizza.Ports do
                 {:ok, Pizza.t() | list(Pizza.t())} | {:error, String.t()}
   end
 
-  defmodule EventRepository do
+  defmodule EventStore do
     @type config :: term()
 
     @callback migrate(term()) :: :ok | {:error, :migrations_error}
@@ -16,7 +16,7 @@ defmodule Pizza.Ports do
                 {:ok, CloudEvent.t()} | {:error, :not_found | :read_error}
   end
 
-  defmodule PizzaProjectionRepository do
+  defmodule PizzaProjection do
     @callback list_pizzas() :: list(Pizza.t())
     @callback get_pizza(id: String.t()) :: Pizza.t()
   end

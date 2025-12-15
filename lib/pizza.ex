@@ -1,10 +1,10 @@
 defmodule Pizza.Main do
   alias Pizza.Adapters.Cli
-  alias Pizza.Adapters.EventRepository
+  alias Pizza.Adapters.EventStore
 
   def main(args \\ []) do
-    event_repository = EventRepository.default()
-    EventRepository.migrate(event_repository)
+    event_store = EventStore.default()
+    EventStore.migrate(event_store)
 
     args
     |> parse
