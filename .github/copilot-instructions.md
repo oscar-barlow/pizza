@@ -43,6 +43,7 @@ Adapters use **compile-time DI** for testability:
    - Mirror `lib/` structure in `test/`
    - Unit tests for core domain should NOT use mocks
    - Adapter tests SHOULD mock their dependencies
+  - Prefer natural-language `describe` block titles instead of function/arity signatures
 
 ## Key Commands
 
