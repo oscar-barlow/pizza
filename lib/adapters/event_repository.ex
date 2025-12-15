@@ -17,16 +17,17 @@ defmodule Pizza.Adapters.EventRepository do
 
   @impl true
   def migrate(%__MODULE__{} = repo) do
-      :code.priv_dir(:pizza)
-      |> Path.join("migrations/**.json")
-      |> Path.wildcard()
-      |> then(fn migration ->
-        Logger.info("Found migration: #{migration}")
-        migration
-      end)
-      |> then(fn migration -> perform_migration(repo, migration) end)
+    :code.priv_dir(:pizza)
+    |> Path.join("migrations/**.json")
+    |> Path.wildcard()
+    |> Enum.reduce_while(:ok, fn migration, acc ->
+      Logger.info("Found migration: #{migration}")
 
-    :ok
+      case perform_migration(repo, migration) do
+        :ok -> {:cont, acc}
+        {:error, :migrations_error} = error -> {:halt, error}
+      end
+    end)
   end
 
   def perform_migration(%__MODULE__{client: client} = _repo, migration) do
@@ -44,8 +45,12 @@ defmodule Pizza.Adapters.EventRepository do
       attr_defs = Dynamo.convert_attribute_definitions(raw_attr_defs)
       key_schema = Dynamo.convert_key_schema(raw_key_schema)
       billing_mode = Dynamo.convert_billing_mode(raw_billing_mode)
+      raw_gsis = Map.get(table_def, :global_secondary_indexes, [])
+      global_secondary_indexes = Dynamo.convert_global_secondary_indexes(raw_gsis)
 
-      opts = [billing_mode: billing_mode]
+      opts =
+        [billing_mode: billing_mode]
+        |> maybe_put_global_indexes(global_secondary_indexes)
 
       case client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request() do
         {:ok, _} ->
@@ -130,4 +135,8 @@ defmodule Pizza.Adapters.EventRepository do
   end
 
   defp next_delay(delay), do: min(delay + 100, 1_000)
+
+  defp maybe_put_global_indexes(opts, []), do: opts
+
+  defp maybe_put_global_indexes(opts, indexes), do: Keyword.put(opts, :global_indexes, indexes)
 end
