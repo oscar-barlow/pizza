@@ -16,53 +16,62 @@ defmodule Pizza.Adapters.EventRepository do
   end
 
   @impl true
-  def migrate((%__MODULE__{} = repo)) do
-    :code.priv_dir(:pizza)
-    |> Path.join("migrations/**.json")
-    |> Path.wildcard()
-    |> Enum.each(&perform_migration(repo, &1))
+  def migrate(%__MODULE__{} = repo) do
+      :code.priv_dir(:pizza)
+      |> Path.join("migrations/**.json")
+      |> Path.wildcard()
+      |> then(fn migration ->
+        Logger.info("Found migration: #{migration}")
+        migration
+      end)
+      |> then(fn migration -> perform_migration(repo, migration) end)
+
     :ok
   end
 
   def perform_migration(%__MODULE__{client: client} = _repo, migration) do
-    Logger.info("[EventRepository] loading migration from #{migration}")
-
     with {:ok, content} <- File.read(migration),
-         _ <- Logger.debug("[EventRepository] migration file read successfully"),
+         _ <- Logger.debug("[EventRepository] migration file '#{migration}' read successfully"),
          {:ok, table_def} <- Jason.decode(content, keys: :atoms),
-         _ <- Logger.debug("[EventRepository] migration JSON decoded"),
+         _ <- Logger.debug("[EventRepository] migration '#{migration}' JSON decoded"),
          %{
            table_name: table_name,
            attribute_definitions: raw_attr_defs,
            key_schema: raw_key_schema,
            billing_mode: raw_billing_mode
          } <- table_def do
-      Logger.debug("[EventRepository] applying migration to table #{table_name}")
+      Logger.debug("[EventRepository] applying migration '#{migration}' to table #{table_name}")
       attr_defs = Dynamo.convert_attribute_definitions(raw_attr_defs)
       key_schema = Dynamo.convert_key_schema(raw_key_schema)
       billing_mode = Dynamo.convert_billing_mode(raw_billing_mode)
 
       opts = [billing_mode: billing_mode]
+
       case client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request() do
         {:ok, _} ->
           Logger.debug("[EventRepository] table #{table_name} created, waiting for ACTIVE state")
           wait_for_table(client, table_name)
 
         {:error, {"ResourceInUseException", _}} ->
-          Logger.debug("[EventRepository] table #{table_name} already exists, ensuring ACTIVE state")
+          Logger.debug(
+            "[EventRepository] table #{table_name} already exists, ensuring ACTIVE state"
+          )
+
           wait_for_table(client, table_name)
 
         {:error, reason} ->
-          Logger.error("[EventRepository] failed to create table #{table_name}: #{inspect(reason)}")
+          Logger.error(
+            "[EventRepository] failed to create table #{table_name}: #{inspect(reason)}"
+          )
+
           {:error, :migrations_error}
       end
     else
       {:error, reason} ->
-        Logger.error("[EventRepository] migration failed: #{inspect(reason)}")
+        Logger.error("[EventRepository] migration #{migration} failed: #{inspect(reason)}")
         {:error, :migrations_error}
     end
   end
-
 
   @impl true
   def store(%__MODULE__{client: client} = _repo, %CloudEvent{} = event) do
@@ -101,21 +110,21 @@ defmodule Pizza.Adapters.EventRepository do
   defp wait_for_table(client, table_name, attempts, delay) do
     case client.describe_table(table_name) |> ExAws.request() do
       {:ok, %{"Table" => %{"TableStatus" => "ACTIVE"}}} ->
-        Logger.info("Table with name '#{table_name}' active")
+        Logger.info("[EventRepository] Table with name '#{table_name}' active")
         :ok
 
       {:ok, _} ->
         Process.sleep(delay)
-        Logger.info("Table #{table_name} not active yet")
+        Logger.info("[EventRepository] Table #{table_name} not active yet")
         wait_for_table(client, table_name, attempts - 1, next_delay(delay))
 
       {:error, {"ResourceNotFoundException", _}} ->
-        Logger.warning("Table with name '#{table_name}' not found")
+        Logger.warning("[EventRepository] Table with name '#{table_name}' not found")
         Process.sleep(delay)
         wait_for_table(client, table_name, attempts - 1, next_delay(delay))
 
       {:error, _} ->
-        Logger.error("Error migrating table with name '#{table_name}'")
+        Logger.error("[EventRepository] Error migrating table with name '#{table_name}'")
         {:error, :migrations_error}
     end
   end
