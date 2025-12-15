@@ -1,5 +1,5 @@
 {
-  "table_name": "pizza_events",
+  "table_name": "events",
   "attribute_definitions": [
     {
       "attribute_name": "StreamId",

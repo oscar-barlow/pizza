@@ -1,8 +1,12 @@
 defmodule Test.RepositoryHelper do
 
   def clear_tables do
-    ExAws.Dynamo.list_tables
-      |> &(Enum.each(&1, clear_table/1))
+    case ExAws.Dynamo.list_tables() |> ExAws.request() do
+      {:ok, %{"TableNames" => tables}} -> :ok
+      {:error, error} ->
+        IO.puts("Error listing tables: ")
+        IO.inspect(error)
+    end
   end
 
   def clear_table(table) do

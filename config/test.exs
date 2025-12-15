@@ -10,6 +10,3 @@ config :ex_aws, :dynamodb,
   host: "localhost",
   port: 4566,
   region: "us-east-1"
-
-config :pizza,
-  events_table: "pizza_events_test"
