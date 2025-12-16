@@ -25,7 +25,7 @@ defmodule Pizza.Adapters.PizzaProjection do
 
     case client.put_item(@pizza_projection, projection_item, opts) |> ExAws.request() do
       {:ok, _} -> {:ok, pizza.id}
-      {:error, reason} -> {:error, :write_error, "Attempted to overwrite pizza with id #{pizza.id} and version #{version}"}
+      {:error, reason} -> {:error, :write_error, "Attempted to overwrite pizza with id #{pizza.id} and version #{version}: #{format_reason(reason)}"}
     end
   end
 

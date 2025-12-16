@@ -68,7 +68,7 @@ defmodule Pizza.Adapters.Dynamo do
 
   defp convert_projection(nil), do: %{projection_type: "ALL"}
 
-  defp convert_projection(%{projection_type: type} = projection) do
+  defp convert_projection(%{projection_type: _} = projection) do
     projection
     |> Map.update!(:projection_type, &String.upcase(to_string(&1)))
   end

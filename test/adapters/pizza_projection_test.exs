@@ -56,7 +56,7 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
           1
         )
 
-      assert {:error, :write_error, "Attempted to overwrite pizza with id #{pizza.id} and version #{cloud_event.version}"}
+      assert {:error, :write_error, "Attempted to overwrite pizza with id #{pizza.id} and version #{cloud_event.version}: {\"ConditionalCheckFailedException\", \"The conditional request failed\"}"}
         == PizzaProjection.save(pizza_projection, changed_cloud_event)
     end
 
