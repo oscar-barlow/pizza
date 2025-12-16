@@ -21,8 +21,7 @@ defmodule Pizza.Adapters.EventStoreTest do
           1
         )
 
-      {:ok,
-       event_store: event_store, pizza: pizza, cloud_event: cloud_event, time: time}
+      {:ok, event_store: event_store, pizza: pizza, cloud_event: cloud_event, time: time}
     end
   end
 

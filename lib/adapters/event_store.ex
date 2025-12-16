@@ -58,16 +58,12 @@ defmodule Pizza.Adapters.EventStore do
           wait_for_table(client, table_name)
 
         {:error, {"ResourceInUseException", _}} ->
-          Logger.info(
-            "[EventStore] table #{table_name} already exists, ensuring ACTIVE state"
-          )
+          Logger.info("[EventStore] table #{table_name} already exists, ensuring ACTIVE state")
 
           wait_for_table(client, table_name)
 
         {:error, reason} ->
-          Logger.error(
-            "[EventStore] failed to create table #{table_name}: #{inspect(reason)}"
-          )
+          Logger.error("[EventStore] failed to create table #{table_name}: #{inspect(reason)}")
 
           {:error, :migrations_error}
       end

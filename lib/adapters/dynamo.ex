@@ -60,7 +60,8 @@ defmodule Pizza.Adapters.Dynamo do
       index_name: index_name,
       key_schema: convert_index_key_schema(raw_key_schema),
       projection: convert_projection(Map.get(raw, :projection)),
-      provisioned_throughput: convert_provisioned_throughput(Map.get(raw, :provisioned_throughput))
+      provisioned_throughput:
+        convert_provisioned_throughput(Map.get(raw, :provisioned_throughput))
     }
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
     |> Map.new()

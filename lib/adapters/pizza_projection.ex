@@ -16,16 +16,25 @@ defmodule Pizza.Adapters.PizzaProjection do
   end
 
   @impl true
-  def save(%__MODULE__{client: client}, %CloudEvent{data: %Pizza{} = pizza, version: version, time: time}) do
+  def save(%__MODULE__{client: client}, %CloudEvent{
+        data: %Pizza{} = pizza,
+        version: version,
+        time: time
+      }) do
     projection_item = assemble_projection(pizza, version, time)
+
     opts = [
       condition_expression: "attribute_not_exists(version) OR :incoming_version > version",
       expression_attribute_values: %{incoming_version: version}
     ]
 
     case client.put_item(@pizza_projection, projection_item, opts) |> ExAws.request() do
-      {:ok, _} -> {:ok, pizza.id}
-      {:error, reason} -> {:error, :write_error, "Attempted to overwrite pizza with id #{pizza.id} and version #{version}: #{format_reason(reason)}"}
+      {:ok, _} ->
+        {:ok, pizza.id}
+
+      {:error, reason} ->
+        {:error, :write_error,
+         "Attempted to overwrite pizza with id #{pizza.id} and version #{version}: #{format_reason(reason)}"}
     end
   end
 
