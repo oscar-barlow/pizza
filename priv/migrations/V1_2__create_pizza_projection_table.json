@@ -2,29 +2,29 @@
     "table_name": "pizza_projection",
     "attribute_definitions": [
         {
-            "attribute_name": "Id",
+            "attribute_name": "id",
             "attribute_type": "S"
         },
         {
-            "attribute_name": "All",
+            "attribute_name": "all",
             "attribute_type": "S"
         },
         {
-            "attribute_name": "Name",
+            "attribute_name": "name",
             "attribute_type": "S"
         },
         {
-            "attribute_name": "Price",
+            "attribute_name": "price",
             "attribute_type": "N"
         },
         {
-            "attribute_name": "UpdatedAt",
+            "attribute_name": "updated_at",
             "attribute_type": "S"
         }
     ],
     "key_schema": [
         {
-            "attribute_name": "Id",
+            "attribute_name": "id",
             "key_type": "HASH"
         }
     ],
@@ -34,11 +34,11 @@
             "index_name": "pizza_by_name",
             "key_schema": [
                 {
-                    "attribute_name": "All",
+                    "attribute_name": "all",
                     "key_type": "HASH"
                 },
                 {
-                    "attribute_name": "Name",
+                    "attribute_name": "name",
                     "key_type": "RANGE"
                 }
             ],
@@ -50,11 +50,11 @@
             "index_name": "pizza_by_price",
             "key_schema": [
                 {
-                    "attribute_name": "All",
+                    "attribute_name": "all",
                     "key_type": "HASH"
                 },
                 {
-                    "attribute_name": "Price",
+                    "attribute_name": "price",
                     "key_type": "RANGE"
                 }
             ],
@@ -66,11 +66,11 @@
             "index_name": "pizza_by_updated_at",
             "key_schema": [
                 {
-                    "attribute_name": "All",
+                    "attribute_name": "all",
                     "key_type": "HASH"
                 },
                 {
-                    "attribute_name": "UpdatedAt",
+                    "attribute_name": "updated_at",
                     "key_type": "RANGE"
                 }
             ],

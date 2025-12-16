@@ -41,7 +41,7 @@ defmodule Pizza.Adapters.EventStore do
            key_schema: raw_key_schema,
            billing_mode: raw_billing_mode
          } <- table_def do
-      Logger.debug("[EventStore] applying migration '#{migration}' to table #{table_name}")
+      Logger.info("[EventStore] applying migration '#{migration}' to table #{table_name}")
       attr_defs = Dynamo.convert_attribute_definitions(raw_attr_defs)
       key_schema = Dynamo.convert_key_schema(raw_key_schema)
       billing_mode = Dynamo.convert_billing_mode(raw_billing_mode)
@@ -54,11 +54,11 @@ defmodule Pizza.Adapters.EventStore do
 
       case client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request() do
         {:ok, _} ->
-          Logger.debug("[EventStore] table #{table_name} created, waiting for ACTIVE state")
+          Logger.info("[EventStore] table #{table_name} created, waiting for ACTIVE state")
           wait_for_table(client, table_name)
 
         {:error, {"ResourceInUseException", _}} ->
-          Logger.debug(
+          Logger.info(
             "[EventStore] table #{table_name} already exists, ensuring ACTIVE state"
           )
 
@@ -91,7 +91,7 @@ defmodule Pizza.Adapters.EventStore do
   @impl true
   def get_event(%__MODULE__{client: client}, stream_id, version)
       when is_binary(stream_id) and is_integer(version) and version > 0 do
-    key = %{"StreamId" => stream_id, "Version" => version}
+    key = %{"stream_id" => stream_id, "version" => version}
 
     case client.get_item(@events_table, key) |> ExAws.request() do
       {:ok, %{"Item" => %{} = item}} when map_size(item) == 0 ->

@@ -6,13 +6,13 @@ defmodule Pizza.Adapters.DynamoTest do
   describe "attribute definition conversion" do
     test "translates attribute definitions into Dynamo tuples" do
       raw = [
-        %{attribute_name: "StreamId", attribute_type: "S"},
-        %{attribute_name: "Version", attribute_type: "N"}
+        %{attribute_name: "stream_id", attribute_type: "S"},
+        %{attribute_name: "version", attribute_type: "N"}
       ]
 
       assert Dynamo.convert_attribute_definitions(raw) == [
-               {:StreamId, :string},
-               {:Version, :number}
+               {:stream_id, :string},
+               {:version, :number}
              ]
     end
   end
@@ -20,13 +20,13 @@ defmodule Pizza.Adapters.DynamoTest do
   describe "key schema conversion" do
     test "translates key schema entries into Dynamo tuples" do
       raw = [
-        %{attribute_name: "StreamId", key_type: "HASH"},
-        %{attribute_name: "Version", key_type: "RANGE"}
+        %{attribute_name: "stream_id", key_type: "HASH"},
+        %{attribute_name: "version", key_type: "RANGE"}
       ]
 
       assert Dynamo.convert_key_schema(raw) == [
-               {:StreamId, :hash},
-               {:Version, :range}
+               {:stream_id, :hash},
+               {:version, :range}
              ]
     end
   end
@@ -44,8 +44,8 @@ defmodule Pizza.Adapters.DynamoTest do
         %{
           index_name: "pizza_by_name",
           key_schema: [
-            %{attribute_name: "All", key_type: "HASH"},
-            %{attribute_name: "Name", key_type: "range"}
+            %{attribute_name: "all", key_type: "HASH"},
+            %{attribute_name: "name", key_type: "range"}
           ]
         }
       ]
@@ -54,8 +54,8 @@ defmodule Pizza.Adapters.DynamoTest do
                %{
                  index_name: "pizza_by_name",
                  key_schema: [
-                   %{attribute_name: "All", key_type: "HASH"},
-                   %{attribute_name: "Name", key_type: "RANGE"}
+                   %{attribute_name: "all", key_type: "HASH"},
+                   %{attribute_name: "name", key_type: "RANGE"}
                  ],
                  projection: %{projection_type: "ALL"}
                }
@@ -67,8 +67,8 @@ defmodule Pizza.Adapters.DynamoTest do
         %{
           index_name: "pizza_by_price",
           key_schema: [
-            %{attribute_name: "All", key_type: "HASH"},
-            %{attribute_name: "Price", key_type: "RANGE"}
+            %{attribute_name: "all", key_type: "HASH"},
+            %{attribute_name: "price", key_type: "RANGE"}
           ],
           projection: %{projection_type: "KEYS_ONLY"},
           provisioned_throughput: %{read_capacity_units: 1, write_capacity_units: 2}
@@ -79,8 +79,8 @@ defmodule Pizza.Adapters.DynamoTest do
                %{
                  index_name: "pizza_by_price",
                  key_schema: [
-                   %{attribute_name: "All", key_type: "HASH"},
-                   %{attribute_name: "Price", key_type: "RANGE"}
+                   %{attribute_name: "all", key_type: "HASH"},
+                   %{attribute_name: "price", key_type: "RANGE"}
                  ],
                  projection: %{projection_type: "KEYS_ONLY"},
                  provisioned_throughput: %{read_capacity_units: 1, write_capacity_units: 2}

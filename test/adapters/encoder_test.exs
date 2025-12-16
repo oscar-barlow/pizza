@@ -17,15 +17,15 @@ defmodule Pizza.Adapters.EncoderTest do
 
       encoded = Encoder.encode_cloud_event(event)
 
-      assert encoded["StreamId"] == "pizza-123"
-      assert encoded["Version"] == 1
-      assert encoded["Id"] == event.id
-      assert encoded["Source"] == "cli"
-      assert encoded["SpecVersion"] == "1.0"
-      assert encoded["Type"] == "create_pizza"
-      assert encoded["Time"] == DateTime.to_iso8601(time)
+      assert encoded["stream_id"] == "pizza-123"
+      assert encoded["version"] == 1
+      assert encoded["id"] == event.id
+      assert encoded["source"] == "cli"
+      assert encoded["specversion"] == "1.0"
+      assert encoded["type"] == "create_pizza"
+      assert encoded["time"] == DateTime.to_iso8601(time)
 
-      assert encoded["Data"] == %{"id" => "123", "name" => "margherita", "price" => 7.5}
+      assert encoded["data"] == %{"id" => "123", "name" => "margherita", "price" => 7.5}
     end
   end
 

@@ -34,9 +34,9 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
   describe "saving pizza" do
 
     test "given a cloud event, saves a pizza", %{cloud_event: cloud_event, pizza_projection: pizza_projection, pizza: pizza} do
-      PizzaProjection.save(pizza_projection, cloud_event)
+      {:ok, id} = PizzaProjection.save(pizza_projection, cloud_event)
 
-      retrieved_pizza = PizzaProjection.get(pizza_projection, cloud_event.data.id)
+      {:ok, retrieved_pizza} = PizzaProjection.get(pizza_projection, id)
       assert retrieved_pizza == pizza
 
     end
