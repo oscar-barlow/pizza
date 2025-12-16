@@ -18,7 +18,9 @@ defmodule Pizza.Ports do
 
   defmodule PizzaProjection do
     @callback save(term(), CloudEvent.t()) :: {:ok, String.t()} | {:error, :write_error, String.t()}
-    @callback list_pizzas(term(), keyword()) :: list(Pizza.t())
+    @callback list_alphabetical(term(), atom()) :: {:ok, list(Pizza.t())}
+    @callback list_chronological(term(), atom()) :: {:ok, list(Pizza.t())}
+    @callback list_by_price(term(), atom()) :: {:ok, list(Pizza.t())}
     @callback get(term(), String.t()) :: {:ok, Pizza.t()} | {:error, :not_found | :read_error}
     @callback delete(term(), String.t()) :: :ok | {:error, :write_error, String.t()}
   end
