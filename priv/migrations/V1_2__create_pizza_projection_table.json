@@ -1,0 +1,82 @@
+{
+    "table_name": "pizza_projection",
+    "attribute_definitions": [
+        {
+            "attribute_name": "id",
+            "attribute_type": "S"
+        },
+        {
+            "attribute_name": "all",
+            "attribute_type": "S"
+        },
+        {
+            "attribute_name": "name",
+            "attribute_type": "S"
+        },
+        {
+            "attribute_name": "price",
+            "attribute_type": "N"
+        },
+        {
+            "attribute_name": "updated_at",
+            "attribute_type": "S"
+        }
+    ],
+    "key_schema": [
+        {
+            "attribute_name": "id",
+            "key_type": "HASH"
+        }
+    ],
+    "billing_mode": "PAY_PER_REQUEST",
+    "global_secondary_indexes": [
+        {
+            "index_name": "pizza_by_name",
+            "key_schema": [
+                {
+                    "attribute_name": "all",
+                    "key_type": "HASH"
+                },
+                {
+                    "attribute_name": "name",
+                    "key_type": "RANGE"
+                }
+            ],
+            "projection": {
+                "projection_type": "ALL"
+            }
+        },
+        {
+            "index_name": "pizza_by_price",
+            "key_schema": [
+                {
+                    "attribute_name": "all",
+                    "key_type": "HASH"
+                },
+                {
+                    "attribute_name": "price",
+                    "key_type": "RANGE"
+                }
+            ],
+            "projection": {
+                "projection_type": "ALL"
+            }
+        },
+        {
+            "index_name": "pizza_by_updated_at",
+            "key_schema": [
+                {
+                    "attribute_name": "all",
+                    "key_type": "HASH"
+                },
+                {
+                    "attribute_name": "updated_at",
+                    "key_type": "RANGE"
+                }
+            ],
+            "projection": {
+                "projection_type": "ALL"
+            }
+        }
+    ]
+}

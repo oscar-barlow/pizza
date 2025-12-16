@@ -1,13 +1,12 @@
-defmodule Pizza.Adapters.EventRepositoryTest do
+defmodule Pizza.Adapters.EventStoreTest do
   use ExUnit.Case
 
-  alias Pizza.Adapters.EventRepository
+  alias Pizza.Adapters.EventStore
   alias Pizza.Event.CloudEvent
   alias Pizza.Core.Pizza
 
   setup do
-    event_repository = EventRepository.default()
-    EventRepository.migrate(event_repository)
+    event_store = EventStore.default()
     Test.RepositoryHelper.clear_tables()
 
     with {:ok, pizza} <- Pizza.new("margherita", 7.5) do
@@ -22,20 +21,19 @@ defmodule Pizza.Adapters.EventRepositoryTest do
           1
         )
 
-      {:ok,
-       event_repository: event_repository, pizza: pizza, cloud_event: cloud_event, time: time}
+      {:ok, event_store: event_store, pizza: pizza, cloud_event: cloud_event, time: time}
     end
   end
 
   test "should store a pizza creation event", %{
-    event_repository: event_repository,
+    event_store: event_store,
     cloud_event: cloud_event
   } do
-    assert {:ok, stored_id} = EventRepository.store(event_repository, cloud_event)
+    assert {:ok, stored_id} = EventStore.store(event_store, cloud_event)
     assert stored_id == cloud_event.id
 
     assert {:ok, fetched_event} =
-             EventRepository.get_event(event_repository, cloud_event.stream_id, cloud_event.version)
+             EventStore.get_event(event_store, cloud_event.stream_id, cloud_event.version)
 
     assert fetched_event == cloud_event
   end

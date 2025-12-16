@@ -1,28 +1,29 @@
 defmodule Pizza.Adapters.Encoder do
   alias Pizza.Event.CloudEvent
+  alias Pizza.Core.Pizza
 
   def encode_cloud_event(%CloudEvent{} = event) do
     %{
-      "StreamId" => event.stream_id,
-      "Version" => event.version,
-      "Id" => event.id,
-      "Source" => Atom.to_string(event.source),
-      "SpecVersion" => event.specversion,
-      "Type" => Atom.to_string(event.type),
-      "Time" => DateTime.to_iso8601(event.time),
-      "Data" => encode(event.data)
+      "stream_id" => event.stream_id,
+      "version" => event.version,
+      "id" => event.id,
+      "source" => Atom.to_string(event.source),
+      "specversion" => event.specversion,
+      "type" => Atom.to_string(event.type),
+      "time" => DateTime.to_iso8601(event.time),
+      "data" => encode(event.data)
     }
   end
 
   def decode_cloud_event(%{
-        "StreamId" => stream_id,
-        "Version" => version,
-        "Id" => id,
-        "Source" => source,
-        "SpecVersion" => spec_version,
-        "Type" => type,
-        "Time" => time,
-        "Data" => data
+        "stream_id" => stream_id,
+        "version" => version,
+        "id" => id,
+        "source" => source,
+        "specversion" => spec_version,
+        "type" => type,
+        "time" => time,
+        "data" => data
       }) do
     with {:ok, decoded_time} <- decode_time(time),
          {:ok, decoded_data} <- decode(data),
@@ -45,6 +46,12 @@ defmodule Pizza.Adapters.Encoder do
 
   def decode_cloud_event(_), do: {:error, :read_error}
 
+  def encode(%Pizza{id: id, name: name, price: price}) do
+    %{"id" => id, "name" => name, "price" => price}
+  end
+
+  def decode_pizza(payload), do: decode(payload)
+
   defp decode_time(value) when is_binary(value) do
     case DateTime.from_iso8601(value) do
       {:ok, datetime, _offset} -> {:ok, datetime}
@@ -63,14 +70,9 @@ defmodule Pizza.Adapters.Encoder do
 
   defp normalise_version(_), do: {:error, :invalid_version}
 
-  defp encode(%Pizza.Core.Pizza{id: id, name: name, price: price}) do
-    %{"id" => id, "name" => name, "price" => price}
-  end
-
   defp decode(%{"id" => id, "name" => name, "price" => price}) do
-    {:ok, %Pizza.Core.Pizza{id: id, name: name, price: price}}
+    {:ok, %Pizza{id: id, name: name, price: price}}
   end
 
   defp decode(_), do: {:error, :invalid_data}
-
 end

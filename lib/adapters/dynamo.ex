@@ -35,6 +35,12 @@ defmodule Pizza.Adapters.Dynamo do
     |> String.to_atom()
   end
 
+  def convert_global_secondary_indexes(raw_indexes) when is_list(raw_indexes) do
+    Enum.map(raw_indexes, &convert_global_secondary_index/1)
+  end
+
+  def convert_global_secondary_indexes(_), do: []
+
   defp attribute_type(type) do
     Map.get(@attribute_type_map, type, normalize_to_atom(type))
   end
@@ -48,4 +54,37 @@ defmodule Pizza.Adapters.Dynamo do
     |> String.downcase()
     |> String.to_atom()
   end
+
+  def convert_global_secondary_index(%{index_name: index_name, key_schema: raw_key_schema} = raw) do
+    %{
+      index_name: index_name,
+      key_schema: convert_index_key_schema(raw_key_schema),
+      projection: convert_projection(Map.get(raw, :projection)),
+      provisioned_throughput:
+        convert_provisioned_throughput(Map.get(raw, :provisioned_throughput))
+    }
+    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    |> Map.new()
+  end
+
+  defp convert_projection(nil), do: %{projection_type: "ALL"}
+
+  defp convert_projection(%{projection_type: _} = projection) do
+    projection
+    |> Map.update!(:projection_type, &String.upcase(to_string(&1)))
+  end
+
+  defp convert_provisioned_throughput(nil), do: nil
+
+  defp convert_provisioned_throughput(%{read_capacity_units: read, write_capacity_units: write}) do
+    %{read_capacity_units: read, write_capacity_units: write}
+  end
+
+  defp convert_index_key_schema(raw_key_schema) when is_list(raw_key_schema) do
+    Enum.map(raw_key_schema, fn %{attribute_name: name, key_type: type} ->
+      %{attribute_name: name, key_type: String.upcase(to_string(type))}
+    end)
+  end
+
+  defp convert_index_key_schema(_), do: []
 end

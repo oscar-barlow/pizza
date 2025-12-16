@@ -2,21 +2,21 @@
   "table_name": "events",
   "attribute_definitions": [
     {
-      "attribute_name": "StreamId",
+      "attribute_name": "stream_id",
       "attribute_type": "S"
     },
     {
-      "attribute_name": "Version",
+      "attribute_name": "version",
       "attribute_type": "N"
     }
   ],
   "key_schema": [
     {
-      "attribute_name": "StreamId",
+      "attribute_name": "stream_id",
       "key_type": "HASH"
     },
     {
-      "attribute_name": "Version",
+      "attribute_name": "version",
       "key_type": "RANGE"
     }
   ],

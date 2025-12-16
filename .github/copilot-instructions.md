@@ -54,19 +54,17 @@ Adapters use **compile-time DI** for testability:
 
 ## Design Decisions & Constraints
 
-1. **No Premature Concurrency**: Avoid GenServers, Tasks, Agents, or other concurrency primitives unless there's a clear performance need. Keep it simple with pure functions.
+1. **Readability Over Cleverness**: Prioritize clear, straightforward code. If a pipeline or abstraction makes the logic harder to follow, break it down.
 
-2. **Readability Over Cleverness**: Prioritize clear, straightforward code. If a pipeline or abstraction makes the logic harder to follow, break it down.
+2. **Self-Documenting Code**: Code should be clear enough to be self-documenting. Do NOT add `@doc` or `@moduledoc` to most modules - the code itself should explain its purpose through good naming and structure. This is counter to standard Elixir conventions but preferred for this codebase. Only add documentation for truly complex algorithms or non-obvious behavior.
 
-3. **Self-Documenting Code**: Code should be clear enough to be self-documenting. Do NOT add `@doc` or `@moduledoc` to most modules - the code itself should explain its purpose through good naming and structure. This is counter to standard Elixir conventions but preferred for this codebase. Only add documentation for truly complex algorithms or non-obvious behavior.
-
-4. **Error Handling**: Domain operations return result tuples instead of raising exceptions
+3. **Error Handling**: Domain operations return result tuples instead of raising exceptions
    - Success: `{:ok, result}`
    - Failure: `{:error, :reason_atom}`
    - Use `with` expressions for chaining operations that can fail
    - Adapters map domain errors to user-friendly messages
 
-5. **Invariant Enforcement**: Domain modules act as consistency boundaries
+4. **Invariant Enforcement**: Domain modules act as consistency boundaries
    - Validate business rules before state changes
    - Return error tuples for validation failures
 
