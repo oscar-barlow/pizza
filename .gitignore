@@ -24,3 +24,6 @@ pizza-*.tar
 
 # LocalStack data directory
 /localstack-data/
+
+# escript app
+pizza

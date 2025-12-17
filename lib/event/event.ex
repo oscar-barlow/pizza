@@ -4,7 +4,6 @@ defmodule Pizza.Event do
     Refer to https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md
     """
 
-    @derive Jason.Encoder
     @enforce_keys [:id, :stream_id, :version, :source, :specversion, :type, :time, :data]
     defstruct id: nil,
               stream_id: nil,
@@ -29,7 +28,7 @@ defmodule Pizza.Event do
     def new_v1(source, type, %DateTime{} = time, data, version)
         when is_integer(version) and version > 0 do
       specversion = "1.0"
-      stream_id = get_stream_id(data)
+      stream_id = stream_id_for(data)
 
       %__MODULE__{
         id: UUID.uuid4(),
@@ -51,7 +50,7 @@ defmodule Pizza.Event do
       raise ArgumentError, "cloud events require DateTime timestamps"
     end
 
-    defp get_stream_id(%{id: id} = data) do
+    def stream_id_for(%{id: id} = data) do
       aggregate_prefix =
         data.__struct__
         |> Module.split()
@@ -60,5 +59,7 @@ defmodule Pizza.Event do
 
       "#{aggregate_prefix}-#{id}"
     end
+
+    def stream_id_for(_), do: raise(ArgumentError, "cloud events require aggregates with id")
   end
 end

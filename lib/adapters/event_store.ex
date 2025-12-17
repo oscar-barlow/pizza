@@ -77,8 +77,9 @@ defmodule Pizza.Adapters.EventStore do
   @impl true
   def store(%__MODULE__{client: client}, %CloudEvent{} = event) do
     item = Encoder.encode_cloud_event(event)
+    opts = [condition_expression: "attribute_not_exists(version)"]
 
-    case client.put_item(@events_table, item) |> ExAws.request() do
+    case client.put_item(@events_table, item, opts) |> ExAws.request() do
       {:ok, _} -> {:ok, event.id}
       {:error, reason} -> {:error, {:write_error, reason}}
     end
@@ -104,6 +105,46 @@ defmodule Pizza.Adapters.EventStore do
       {:error, _} ->
         {:error, :read_error}
     end
+  end
+
+  @impl true
+  def next_version(%__MODULE__{client: client}, aggregate)
+      when is_map(aggregate) do
+    stream_id = CloudEvent.stream_id_for(aggregate)
+
+    query_opts = [
+      key_condition_expression: "#stream_id = :stream_id",
+      expression_attribute_names: %{"#stream_id" => "stream_id"},
+      expression_attribute_values: %{stream_id: stream_id},
+      projection_expression: "version",
+      scan_index_forward: false,
+      limit: 1
+    ]
+
+    case client.query(@events_table, query_opts) |> ExAws.request() do
+      {:ok, %{"Items" => [item | _]}} ->
+        decoded = ExAws.Dynamo.Decoder.decode(item)
+        version = Map.get(decoded, "version") || Map.get(decoded, :version)
+        normalize_version(version)
+
+      {:ok, %{"Items" => []}} ->
+        {:ok, 1}
+
+      {:ok, %{}} ->
+        {:ok, 1}
+
+      {:error, reason} ->
+        Logger.error("[EventStore] failed to determine next version for #{stream_id}: #{inspect(reason)}")
+        {:error, {:read_error, reason}}
+    end
+  rescue
+    e in ArgumentError ->
+      Logger.error("[EventStore] #{Exception.message(e)}")
+      {:error, :invalid_aggregate}
+  end
+
+  def next_version(%__MODULE__{}, _aggregate) do
+    {:error, :invalid_aggregate}
   end
 
   defp wait_for_table(client, table_name), do: wait_for_table(client, table_name, 10, 100)
@@ -135,4 +176,20 @@ defmodule Pizza.Adapters.EventStore do
   defp maybe_put_global_indexes(opts, []), do: opts
 
   defp maybe_put_global_indexes(opts, indexes), do: Keyword.put(opts, :global_indexes, indexes)
+
+  defp normalize_version(nil), do: {:error, :invalid_version}
+  defp normalize_version(version) when is_integer(version), do: {:ok, version + 1}
+  defp normalize_version(%{"N" => number}) do
+    number
+    |> String.to_integer()
+    |> normalize_version()
+  end
+  defp normalize_version(version) when is_binary(version) do
+    version
+    |> String.to_integer()
+    |> normalize_version()
+  rescue
+    ArgumentError -> {:error, :invalid_version}
+  end
+  defp normalize_version(_), do: {:error, :invalid_version}
 end

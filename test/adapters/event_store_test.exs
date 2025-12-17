@@ -37,4 +37,14 @@ defmodule Pizza.Adapters.EventStoreTest do
 
     assert fetched_event == cloud_event
   end
+
+  test "does not overwrite an event with the same version", %{
+    event_store: event_store,
+    cloud_event: cloud_event
+  } do
+    assert {:ok, _} = EventStore.store(event_store, cloud_event)
+
+    assert {:error, {:write_error, {"ConditionalCheckFailedException", "The conditional request failed"}}} =
+             EventStore.store(event_store, cloud_event)
+  end
 end
