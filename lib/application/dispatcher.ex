@@ -7,11 +7,20 @@ defmodule Pizza.Application.Dispatcher do
   alias Pizza.Core.Pizza
 
   def start_link(opts \\ []) do
+    opts = Keyword.put_new(opts, :name, __MODULE__)
     start_opts = Keyword.take(opts, [:name])
     GenServer.start_link(__MODULE__, opts, start_opts)
   end
 
+  def save_pizza(attrs) when is_map(attrs) do
+    save_pizza(__MODULE__, attrs)
+  end
+
   def save_pizza(server, attrs), do: GenServer.call(server, {:save_pizza, attrs})
+
+  def list_pizzas(list_type, order) do
+    list_pizzas(__MODULE__, list_type, order)
+  end
 
   def list_pizzas(server, list_type, order),
     do: GenServer.call(server, {:list_pizzas, list_type, order})

@@ -77,7 +77,7 @@ defmodule Pizza.Adapters.EventStore do
   @impl true
   def store(%__MODULE__{client: client}, %CloudEvent{} = event) do
     item = Encoder.encode_cloud_event(event)
-    opts = [condition_expression: "attribute_not_exists(stream_id)"]
+    opts = [condition_expression: "attribute_not_exists(version)"]
 
     case client.put_item(@events_table, item, opts) |> ExAws.request() do
       {:ok, _} -> {:ok, event.id}

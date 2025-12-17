@@ -5,6 +5,7 @@ defmodule Pizza.Application.PizzaProjectionProcess do
   alias Pizza.Event.CloudEvent
 
   def start_link(opts \\ []) do
+    opts = Keyword.put_new(opts, :name, __MODULE__)
     start_opts = Keyword.take(opts, [:name])
     GenServer.start_link(__MODULE__, opts, start_opts)
   end

@@ -15,7 +15,8 @@ defmodule Pizza.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {Pizza.Application, []}
     ]
   end
 
@@ -31,6 +32,6 @@ defmodule Pizza.MixProject do
   end
 
   defp escript do
-    [main_module: Pizza.Main]
+    [main_module: Pizza.Application]
   end
 end
