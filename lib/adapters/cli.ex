@@ -59,7 +59,7 @@ defmodule Pizza.Adapters.Cli do
   def format({:ok, result}, _command), do: inspect(result)
 
   defp format_pizza(%Pizza{name: name, price: price}) do
-    "#{name} (#{format_price(price)})"
+    "#{name} (#{(price)})"
   end
 
   defp format_error(:invalid_payload), do: "Invalid pizza attributes"
