@@ -1,4 +1,4 @@
-defmodule Pizza.Main do
+defmodule Pizza.Application do
   alias Pizza.Adapters.Cli
   alias Pizza.Adapters.EventStore
 
