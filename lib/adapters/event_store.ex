@@ -31,45 +31,64 @@ defmodule Pizza.Adapters.EventStore do
   end
 
   def perform_migration(%__MODULE__{client: client}, migration) do
+    with {:ok, table_def} <- load_migration(migration),
+         {:ok, table_params} <- convert_table_definition(table_def, migration) do
+      apply_changes(client, table_params, migration)
+    end
+  end
+
+  defp load_migration(migration) do
     with {:ok, content} <- File.read(migration),
          _ <- Logger.debug("[EventStore] migration file '#{migration}' read successfully"),
          {:ok, table_def} <- Jason.decode(content, keys: :atoms),
-         _ <- Logger.debug("[EventStore] migration '#{migration}' JSON decoded"),
-         %{
+         _ <- Logger.debug("[EventStore] migration '#{migration}' JSON decoded") do
+      {:ok, table_def}
+    else
+      {:error, reason} ->
+        Logger.error("[EventStore] migration #{migration} could not be read: #{inspect(reason)}")
+        {:error, :migrations_error}
+    end
+  end
+
+  defp convert_table_definition(table_def, migration) do
+    with %{
            table_name: table_name,
            attribute_definitions: raw_attr_defs,
            key_schema: raw_key_schema,
            billing_mode: raw_billing_mode
          } <- table_def do
-      Logger.info("[EventStore] applying migration '#{migration}' to table #{table_name}")
-      attr_defs = Dynamo.convert_attribute_definitions(raw_attr_defs)
-      key_schema = Dynamo.convert_key_schema(raw_key_schema)
-      billing_mode = Dynamo.convert_billing_mode(raw_billing_mode)
-      raw_gsis = Map.get(table_def, :global_secondary_indexes, [])
-      global_secondary_indexes = Dynamo.convert_global_secondary_indexes(raw_gsis)
+      Logger.debug("[EventStore] converting '#{migration}' to dynamodb format for table #{table_name}")
 
-      opts =
-        [billing_mode: billing_mode]
-        |> maybe_put_global_indexes(global_secondary_indexes)
+      with {:ok, attr_defs} <- Dynamo.convert_attribute_definitions(raw_attr_defs),
+           {:ok, key_schema} <- Dynamo.convert_key_schema(raw_key_schema),
+           {:ok, billing_mode} <- Dynamo.convert_billing_mode(raw_billing_mode),
+           raw_gsis <- Map.get(table_def, :global_secondary_indexes, []),
+           {:ok, global_secondary_indexes} <- Dynamo.convert_global_secondary_indexes(raw_gsis) do
+        opts =
+          [billing_mode: billing_mode]
+          |> maybe_put_global_indexes(global_secondary_indexes)
 
-      case client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request() do
-        {:ok, _} ->
-          Logger.info("[EventStore] table #{table_name} created, waiting for ACTIVE state")
-          wait_for_table(client, table_name)
-
-        {:error, {"ResourceInUseException", _}} ->
-          Logger.info("[EventStore] table #{table_name} already exists, ensuring ACTIVE state")
-
-          wait_for_table(client, table_name)
-
-        {:error, reason} ->
-          Logger.error("[EventStore] failed to create table #{table_name}: #{inspect(reason)}")
-
-          {:error, :migrations_error}
+        {:ok, {table_name, key_schema, attr_defs, opts}}
+      else
+        {:error, reason} = error ->
+          Logger.error("[EventStore] invalid migration schema in '#{migration}': #{inspect(reason)}")
+          error
       end
-    else
+    end
+  end
+
+  defp apply_changes(client, {table_name, key_schema, attr_defs, opts}, migration) do
+    case client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request() do
+      {:ok, _} ->
+        Logger.info("[EventStore] table #{table_name} created, waiting for ACTIVE state")
+        wait_for_table(client, table_name)
+
+      {:error, {"ResourceInUseException", _}} ->
+        Logger.info("[EventStore] table #{table_name} already exists, ensuring ACTIVE state")
+        wait_for_table(client, table_name)
+
       {:error, reason} ->
-        Logger.error("[EventStore] migration #{migration} failed: #{inspect(reason)}")
+        Logger.error("[EventStore] failed to apply migration #{migration} to table #{table_name}: #{inspect(reason)}")
         {:error, :migrations_error}
     end
   end
