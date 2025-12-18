@@ -1,4 +1,6 @@
 defmodule Pizza.Adapters.EventStore do
+  @moduledoc false
+
   @behaviour Pizza.Ports.EventStore
 
   alias Pizza.Adapters.{Dynamo, Encoder}
@@ -21,7 +23,7 @@ defmodule Pizza.Adapters.EventStore do
     |> Path.join("migrations/**.json")
     |> Path.wildcard()
     |> Enum.reduce_while(:ok, fn migration, acc ->
-      Logger.info("Found migration: #{migration}")
+      Logger.info("Found migration", migration: migration)
 
       case perform_migration(store, migration) do
         :ok -> {:cont, acc}
@@ -39,13 +41,13 @@ defmodule Pizza.Adapters.EventStore do
 
   defp load_migration(migration) do
     with {:ok, content} <- File.read(migration),
-         _ <- Logger.debug("[EventStore] migration file '#{migration}' read successfully"),
+         _ <- Logger.debug("Migration file read successfully", migration: migration),
          {:ok, table_def} <- Jason.decode(content, keys: :atoms),
-         _ <- Logger.debug("[EventStore] migration '#{migration}' JSON decoded") do
+         _ <- Logger.debug("Migration JSON decoded", migration: migration) do
       {:ok, table_def}
     else
       {:error, reason} ->
-        Logger.error("[EventStore] migration #{migration} could not be read: #{inspect(reason)}")
+        Logger.error("Migration could not be read", migration: migration, reason: reason)
         {:error, :migrations_error}
     end
   end
@@ -57,7 +59,7 @@ defmodule Pizza.Adapters.EventStore do
            key_schema: raw_key_schema,
            billing_mode: raw_billing_mode
          } <- table_def do
-      Logger.debug("[EventStore] converting '#{migration}' to dynamodb format for table #{table_name}")
+      Logger.debug("Converting migration to DynamoDB format", migration: migration, table: table_name)
 
       with {:ok, attr_defs} <- Dynamo.convert_attribute_definitions(raw_attr_defs),
            {:ok, key_schema} <- Dynamo.convert_key_schema(raw_key_schema),
@@ -71,7 +73,7 @@ defmodule Pizza.Adapters.EventStore do
         {:ok, {table_name, key_schema, attr_defs, opts}}
       else
         {:error, reason} = error ->
-          Logger.error("[EventStore] invalid migration schema in '#{migration}': #{inspect(reason)}")
+          Logger.error("Invalid migration schema", migration: migration, reason: reason)
           error
       end
     end
@@ -80,15 +82,15 @@ defmodule Pizza.Adapters.EventStore do
   defp apply_changes(client, {table_name, key_schema, attr_defs, opts}, migration) do
     case client.create_table(table_name, key_schema, attr_defs, opts) |> ExAws.request() do
       {:ok, _} ->
-        Logger.info("[EventStore] table #{table_name} created, waiting for ACTIVE state")
+        Logger.info("Table created, waiting for ACTIVE state", table: table_name)
         wait_for_table(client, table_name)
 
       {:error, {"ResourceInUseException", _}} ->
-        Logger.info("[EventStore] table #{table_name} already exists, ensuring ACTIVE state")
+        Logger.info("Table already exists, ensuring ACTIVE state", table: table_name)
         wait_for_table(client, table_name)
 
       {:error, reason} ->
-        Logger.error("[EventStore] failed to apply migration #{migration} to table #{table_name}: #{inspect(reason)}")
+        Logger.error("Failed to apply migration", migration: migration, table: table_name, reason: reason)
         {:error, :migrations_error}
     end
   end
@@ -153,12 +155,12 @@ defmodule Pizza.Adapters.EventStore do
         {:ok, 1}
 
       {:error, reason} ->
-        Logger.error("[EventStore] failed to determine next version for #{stream_id}: #{inspect(reason)}")
+        Logger.error("Failed to determine next version", stream_id: stream_id, reason: reason)
         {:error, {:read_error, reason}}
     end
   rescue
     e in ArgumentError ->
-      Logger.error("[EventStore] #{Exception.message(e)}")
+      Logger.error("Invalid aggregate", error: Exception.message(e))
       {:error, :invalid_aggregate}
   end
 
@@ -171,21 +173,21 @@ defmodule Pizza.Adapters.EventStore do
   defp wait_for_table(client, table_name, attempts, delay) do
     case client.describe_table(table_name) |> ExAws.request() do
       {:ok, %{"Table" => %{"TableStatus" => "ACTIVE"}}} ->
-        Logger.info("[EventStore] Table with name '#{table_name}' active")
+        Logger.info("Table active", table: table_name)
         :ok
 
       {:ok, _} ->
         Process.sleep(delay)
-        Logger.info("[EventStore] Table #{table_name} not active yet")
+        Logger.info("Table not active yet", table: table_name)
         wait_for_table(client, table_name, attempts - 1, next_delay(delay))
 
       {:error, {"ResourceNotFoundException", _}} ->
-        Logger.warning("[EventStore] Table with name '#{table_name}' not found")
+        Logger.warning("Table not found", table: table_name)
         Process.sleep(delay)
         wait_for_table(client, table_name, attempts - 1, next_delay(delay))
 
       {:error, _} ->
-        Logger.error("[EventStore] Error migrating table with name '#{table_name}'")
+        Logger.error("Error migrating table", table: table_name)
         {:error, :migrations_error}
     end
   end

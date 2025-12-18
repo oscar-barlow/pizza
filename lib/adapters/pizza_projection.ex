@@ -1,4 +1,6 @@
 defmodule Pizza.Adapters.PizzaProjection do
+  @moduledoc false
+
   @behaviour Pizza.Ports.PizzaProjection
 
   defstruct [:client]
@@ -140,13 +142,10 @@ defmodule Pizza.Adapters.PizzaProjection do
 
   defp decode_collection({:ok, %{"Items" => items}}) do
     pizzas =
-      items
-      |> Enum.map(&ExAws.Dynamo.Decoder.decode/1)
-      |> Enum.map(&read_projection/1)
-      |> Enum.flat_map(fn
-        {:ok, pizza} -> [pizza]
-        _ -> []
-      end)
+      for item <- items,
+          decoded = ExAws.Dynamo.Decoder.decode(item),
+          {:ok, pizza} <- [read_projection(decoded)],
+          do: pizza
 
     {:ok, pizzas}
   end

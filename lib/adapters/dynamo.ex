@@ -1,4 +1,6 @@
 defmodule Pizza.Adapters.Dynamo do
+  @moduledoc false
+
   require Logger
 
   @attribute_type_map %{
@@ -75,7 +77,7 @@ defmodule Pizza.Adapters.Dynamo do
     String.to_existing_atom(value)
   rescue
     ArgumentError ->
-      Logger.warning("Creating new atom from migration: #{value}")
+      Logger.warning("Creating new atom from migration", value: value)
       String.to_atom(value)
   end
 

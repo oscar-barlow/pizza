@@ -1,4 +1,6 @@
 defmodule Pizza.Adapters.Encoder do
+  @moduledoc false
+
   alias Pizza.Event.CloudEvent
   alias Pizza.Core.Pizza
 

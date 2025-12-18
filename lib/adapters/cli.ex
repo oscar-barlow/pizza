@@ -1,4 +1,6 @@
 defmodule Pizza.Adapters.Cli do
+  @moduledoc false
+
   @behaviour Pizza.Ports.Cli
 
   alias Pizza.Core.Pizza
