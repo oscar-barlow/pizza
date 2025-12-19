@@ -2,6 +2,7 @@ defmodule Pizza.Adapters.Encoder do
   @moduledoc false
 
   alias Pizza.Event.CloudEvent
+  alias Pizza.Events
   alias Pizza.Core.Pizza
 
   def encode_cloud_event(%CloudEvent{} = event) do
@@ -48,8 +49,35 @@ defmodule Pizza.Adapters.Encoder do
 
   def decode_cloud_event(_), do: {:error, :read_error}
 
-  def encode(%Pizza{id: id, name: name, price: price}) do
-    %{"id" => id, "name" => name, "price" => price}
+  def encode(%Pizza{id: id, name: name, price: price, version: version}) do
+    %{"id" => id, "name" => name, "price" => price, "version" => version}
+  end
+
+  def encode(%Events.PizzaCreated{} = event) do
+    %{
+      "pizza_id" => event.pizza_id,
+      "name" => event.name,
+      "price" => event.price,
+      "occurred_at" => DateTime.to_iso8601(event.occurred_at)
+    }
+  end
+
+  def encode(%Events.PriceChanged{} = event) do
+    %{
+      "pizza_id" => event.pizza_id,
+      "old_price" => event.old_price,
+      "new_price" => event.new_price,
+      "occurred_at" => DateTime.to_iso8601(event.occurred_at)
+    }
+  end
+
+  def encode(%Events.PizzaRenamed{} = event) do
+    %{
+      "pizza_id" => event.pizza_id,
+      "old_name" => event.old_name,
+      "new_name" => event.new_name,
+      "occurred_at" => DateTime.to_iso8601(event.occurred_at)
+    }
   end
 
   def decode_pizza(payload), do: decode(payload)
@@ -72,8 +100,30 @@ defmodule Pizza.Adapters.Encoder do
 
   defp normalise_version(_), do: {:error, :invalid_version}
 
+  defp decode(%{"id" => id, "name" => name, "price" => price, "version" => version}) do
+    {:ok, %Pizza{id: id, name: name, price: price, version: version}}
+  end
+
   defp decode(%{"id" => id, "name" => name, "price" => price}) do
-    {:ok, %Pizza{id: id, name: name, price: price}}
+    {:ok, %Pizza{id: id, name: name, price: price, version: 0}}
+  end
+
+  defp decode(%{"pizza_id" => pizza_id, "name" => name, "price" => price, "occurred_at" => occurred_at}) do
+    with {:ok, time} <- decode_time(occurred_at) do
+      {:ok, %Events.PizzaCreated{pizza_id: pizza_id, name: name, price: price, occurred_at: time}}
+    end
+  end
+
+  defp decode(%{"pizza_id" => pizza_id, "old_price" => old_price, "new_price" => new_price, "occurred_at" => occurred_at}) do
+    with {:ok, time} <- decode_time(occurred_at) do
+      {:ok, %Events.PriceChanged{pizza_id: pizza_id, old_price: old_price, new_price: new_price, occurred_at: time}}
+    end
+  end
+
+  defp decode(%{"pizza_id" => pizza_id, "old_name" => old_name, "new_name" => new_name, "occurred_at" => occurred_at}) do
+    with {:ok, time} <- decode_time(occurred_at) do
+      {:ok, %Events.PizzaRenamed{pizza_id: pizza_id, old_name: old_name, new_name: new_name, occurred_at: time}}
+    end
   end
 
   defp decode(_), do: {:error, :invalid_data}

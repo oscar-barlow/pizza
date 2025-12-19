@@ -15,6 +15,9 @@ defmodule Pizza.Application.EventStoreProcess do
   def get_event(server, stream_id, version),
     do: GenServer.call(server, {:get_event, stream_id, version})
 
+  def get_stream(server, stream_id),
+    do: GenServer.call(server, {:get_stream, stream_id})
+
   def next_version(server, aggregate),
     do: GenServer.call(server, {:next_version, aggregate})
 
@@ -42,6 +45,13 @@ defmodule Pizza.Application.EventStoreProcess do
     %{event_store_adapter: event_store_adapter, client: client} = state
 
     {:reply, event_store_adapter.get_event(client, stream_id, version), state}
+  end
+
+  @impl true
+  def handle_call({:get_stream, stream_id}, _from, state) do
+    %{event_store_adapter: event_store_adapter, client: client} = state
+
+    {:reply, event_store_adapter.get_stream(client, stream_id), state}
   end
 
   @impl true

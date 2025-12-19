@@ -129,6 +129,30 @@ defmodule Pizza.Adapters.EventStore do
   end
 
   @impl true
+  def get_stream(%__MODULE__{client: client}, stream_id) when is_binary(stream_id) do
+    query_opts = [
+      key_condition_expression: "#stream_id = :stream_id",
+      expression_attribute_names: %{"#stream_id" => "stream_id"},
+      expression_attribute_values: %{stream_id: stream_id},
+      scan_index_forward: true
+    ]
+
+    case client.query(@events_table, query_opts) |> ExAws.request() do
+      {:ok, %{"Items" => items}} when is_list(items) ->
+        events =
+          items
+          |> Enum.map(&ExAws.Dynamo.Decoder.decode/1)
+          |> Enum.map(&Encoder.decode_cloud_event/1)
+          |> Enum.map(fn {:ok, event} -> event end)
+
+        {:ok, events}
+
+      {:error, _} ->
+        {:error, :read_error}
+    end
+  end
+
+  @impl true
   def next_version(%__MODULE__{client: client}, aggregate)
       when is_map(aggregate) do
     stream_id = CloudEvent.stream_id_for(aggregate)

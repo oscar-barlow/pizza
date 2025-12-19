@@ -6,9 +6,9 @@ defmodule Pizza.Adapters.Cli do
   alias Pizza.Core.Pizza
 
   @impl true
-  def parse(["save", name, price_string]) do
+  def parse(["create", name, price_string]) do
     case Float.parse(price_string) do
-      {price, ""} -> {:ok, {:save, %{name: name, price: price}}}
+      {price, ""} -> {:ok, {:create, name, price}}
       _ -> {:error, "Price must be a number"}
     end
   end
@@ -34,11 +34,11 @@ defmodule Pizza.Adapters.Cli do
   end
 
   @impl true
-  def format({:ok, %Pizza{} = pizza}, {:save, _}) do
-    "Saved pizza #{pizza.name} (#{format_price(pizza.price)})"
+  def format({:ok, %Pizza{} = pizza}, {:create, _, _}) do
+    "Created pizza #{pizza.name} (#{format_price(pizza.price)})"
   end
 
-  def format({:error, reason}, {:save, _}) do
+  def format({:error, reason}, {:create, _, _}) do
     format_error(reason)
   end
 
@@ -61,7 +61,7 @@ defmodule Pizza.Adapters.Cli do
   def format({:ok, result}, _command), do: inspect(result)
 
   defp format_pizza(%Pizza{name: name, price: price}) do
-    "#{name} (#{(price)})"
+    "#{name} (#{format_price(price)})"
   end
 
   defp format_error(:invalid_payload), do: "Invalid pizza attributes"

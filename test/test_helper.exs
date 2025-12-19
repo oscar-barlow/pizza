@@ -34,6 +34,4 @@ defmodule Test.RepositoryHelper do
   end
 end
 
-Test.RepositoryHelper.ensure_tables!()
-
 ExUnit.start()

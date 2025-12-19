@@ -2,27 +2,30 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
   use ExUnit.Case
 
   alias Pizza.Adapters.PizzaProjection
-  alias Pizza.Core.Pizza, as: CorePizza
   alias Pizza.Event.CloudEvent
+  alias Pizza.Events.{PizzaCreated, PriceChanged}
 
   setup_all do
     pizza_projection = PizzaProjection.default()
 
-    with {:ok, pizza} <- CorePizza.new("margherita", 7.5) do
-      time = DateTime.utc_now()
+    {:ok, pizza, _events} = Pizza.Core.Pizza.new("margherita", 7.5)
+    time = DateTime.utc_now()
 
-      cloud_event =
-        CloudEvent.new_v1(
-          :test,
-          :create_pizza,
-          time,
-          pizza,
-          1
-        )
+    pizza_created_event = %PizzaCreated{
+      pizza_id: pizza.id,
+      name: pizza.name,
+      price: pizza.price,
+      occurred_at: time
+    }
 
-      {:ok,
-       pizza_projection: pizza_projection, pizza: pizza, cloud_event: cloud_event, time: time}
-    end
+    cloud_event =
+      CloudEvent.new_v1(:test, :pizza_created, time, pizza_created_event, 1)
+
+    {:ok,
+     pizza_projection: pizza_projection,
+     pizza: pizza,
+     cloud_event: cloud_event,
+     time: time}
   end
 
   describe "saving pizza" do
@@ -34,25 +37,20 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
 
     test "given a cloud event, saves a pizza", %{pizza_projection: pizza_projection, pizza: pizza} do
       {:ok, retrieved_pizza} = PizzaProjection.get(pizza_projection, pizza.id)
-      assert retrieved_pizza == pizza
+      assert retrieved_pizza == with_version(pizza, 1)
     end
 
     test "does not overwrite a pizza, even if data have changed, given event version has already been received",
          %{cloud_event: cloud_event, pizza_projection: pizza_projection, pizza: pizza} do
-      changed = %CorePizza{
-        id: pizza.id,
+      changed_event = %PizzaCreated{
+        pizza_id: pizza.id,
         name: String.reverse(pizza.name),
-        price: pizza.price * 2
+        price: pizza.price * 2,
+        occurred_at: cloud_event.time
       }
 
       changed_cloud_event =
-        CloudEvent.new_v1(
-          :test,
-          :create_pizza,
-          cloud_event.time,
-          changed,
-          1
-        )
+        CloudEvent.new_v1(:test, :pizza_created, cloud_event.time, changed_event, 1)
 
       assert {:error, :write_error,
               "Attempted to overwrite pizza with id #{pizza.id} and version #{cloud_event.version}: {\"ConditionalCheckFailedException\", \"The conditional request failed\"}"} ==
@@ -64,25 +62,20 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       pizza_projection: pizza_projection,
       pizza: pizza
     } do
-      changed = %CorePizza{
-        id: pizza.id,
-        name: pizza.name,
-        price: 10
-      }
-
       changed_cloud_event =
-        CloudEvent.new_v1(
-          :test,
-          :create_pizza,
-          cloud_event.time,
-          changed,
+        price_changed_cloud_event(
+          pizza.id,
+          pizza.price,
+          10,
+          DateTime.shift(cloud_event.time, minute: 1),
           2
         )
 
       {:ok, id} = PizzaProjection.save(pizza_projection, changed_cloud_event)
 
       {:ok, retrieved_pizza} = PizzaProjection.get(pizza_projection, id)
-      assert retrieved_pizza == changed
+      expected = %Pizza.Core.Pizza{id: pizza.id, name: pizza.name, price: 10, version: 2}
+      assert retrieved_pizza == expected
     end
   end
 
@@ -91,27 +84,15 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       Test.RepositoryHelper.clear_tables()
       PizzaProjection.save(pizza_projection, cloud_event)
 
-      {:ok, funghi} = CorePizza.new("funghi", 8)
+      {:ok, funghi, _events} = Pizza.Core.Pizza.new("funghi", 8)
 
       funghi_event =
-        CloudEvent.new_v1(
-          :test,
-          :create_pizza,
-          DateTime.shift(time, minute: 1),
-          funghi,
-          1
-        )
+        pizza_created_cloud_event(funghi, DateTime.shift(time, minute: 1), 1)
 
-      {:ok, pepperoni} = CorePizza.new("pepperoni", 10)
+      {:ok, pepperoni, _events} = Pizza.Core.Pizza.new("pepperoni", 10)
 
       pepperoni_event =
-        CloudEvent.new_v1(
-          :test,
-          :create_pizza,
-          DateTime.shift(time, minute: 2),
-          pepperoni,
-          1
-        )
+        pizza_created_cloud_event(pepperoni, DateTime.shift(time, minute: 2), 1)
 
       Enum.each([cloud_event, funghi_event, pepperoni_event], fn event ->
         PizzaProjection.save(pizza_projection, event)
@@ -128,7 +109,7 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
     } do
       {:ok, alphabetical_ascending} = PizzaProjection.list_alphabetical(pizza_projection, :asc)
 
-      assert alphabetical_ascending == [funghi, pizza, pepperoni]
+      assert alphabetical_ascending == [with_version(funghi, 1), with_version(pizza, 1), with_version(pepperoni, 1)]
     end
 
     test "retrieves all pizzas, sorted descending alphabetically", %{
@@ -139,7 +120,7 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
     } do
       {:ok, alphabetical_descending} = PizzaProjection.list_alphabetical(pizza_projection, :desc)
 
-      assert alphabetical_descending == [pepperoni, pizza, funghi]
+      assert alphabetical_descending == [with_version(pepperoni, 1), with_version(pizza, 1), with_version(funghi, 1)]
     end
 
     test "retrieves all pizzas, sorted ascending by updated time", %{
@@ -149,7 +130,7 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       pepperoni: pepperoni
     } do
       {:ok, time_ascending} = PizzaProjection.list_chronological(pizza_projection, :asc)
-      assert time_ascending == [pizza, funghi, pepperoni]
+      assert time_ascending == [with_version(pizza, 1), with_version(funghi, 1), with_version(pepperoni, 1)]
     end
 
     test "retrieves all pizzas, sorted descending by updated time", %{
@@ -159,7 +140,7 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       pepperoni: pepperoni
     } do
       {:ok, time_descending} = PizzaProjection.list_chronological(pizza_projection, :desc)
-      assert time_descending == [pepperoni, funghi, pizza]
+      assert time_descending == [with_version(pepperoni, 1), with_version(funghi, 1), with_version(pizza, 1)]
     end
 
     test "retrieves all pizzas, sorted ascending by price", %{
@@ -169,7 +150,7 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       pepperoni: pepperoni
     } do
       {:ok, price_ascending} = PizzaProjection.list_by_price(pizza_projection, :asc)
-      assert price_ascending == [pizza, funghi, pepperoni]
+      assert price_ascending == [with_version(pizza, 1), with_version(funghi, 1), with_version(pepperoni, 1)]
     end
 
     test "retrieves all pizzas, sorted descending by price", %{
@@ -179,7 +160,7 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       pepperoni: pepperoni
     } do
       {:ok, price_descnding} = PizzaProjection.list_by_price(pizza_projection, :desc)
-      assert price_descnding == [pepperoni, funghi, pizza]
+      assert price_descnding == [with_version(pepperoni, 1), with_version(funghi, 1), with_version(pizza, 1)]
     end
   end
 
@@ -195,5 +176,27 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
 
       assert {:error, :not_found} == PizzaProjection.get(pizza_projection, pizza.id)
     end
+  end
+
+  defp with_version(%Pizza.Core.Pizza{} = pizza, version), do: %{pizza | version: version}
+
+  defp pizza_created_cloud_event(pizza, time, version) do
+    %PizzaCreated{
+      pizza_id: pizza.id,
+      name: pizza.name,
+      price: pizza.price,
+      occurred_at: time
+    }
+    |> then(&CloudEvent.new_v1(:test, :pizza_created, time, &1, version))
+  end
+
+  defp price_changed_cloud_event(pizza_id, old_price, new_price, time, version) do
+    %PriceChanged{
+      pizza_id: pizza_id,
+      old_price: old_price,
+      new_price: new_price,
+      occurred_at: time
+    }
+    |> then(&CloudEvent.new_v1(:test, :price_changed, time, &1, version))
   end
 end

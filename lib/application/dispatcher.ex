@@ -4,6 +4,7 @@ defmodule Pizza.Application.Dispatcher do
   alias Pizza.Application.EventStoreProcess
   alias Pizza.Application.PizzaProjectionProcess
   alias Pizza.Event.CloudEvent
+  alias Pizza.Events
   alias Pizza.Core.Pizza
 
   def start_link(opts \\ []) do
@@ -12,11 +13,25 @@ defmodule Pizza.Application.Dispatcher do
     GenServer.start_link(__MODULE__, opts, start_opts)
   end
 
-  def save_pizza(attrs) when is_map(attrs) do
-    save_pizza(__MODULE__, attrs)
+  def create_pizza(name, price) when is_binary(name) and is_number(price) do
+    create_pizza(__MODULE__, name, price)
   end
 
-  def save_pizza(server, attrs), do: GenServer.call(server, {:save_pizza, attrs})
+  def create_pizza(server, name, price), do: GenServer.call(server, {:create_pizza, name, price})
+
+  def change_pizza_price(pizza_id, new_price) when is_binary(pizza_id) and is_number(new_price) do
+    change_pizza_price(__MODULE__, pizza_id, new_price)
+  end
+
+  def change_pizza_price(server, pizza_id, new_price),
+    do: GenServer.call(server, {:change_price, pizza_id, new_price})
+
+  def rename_pizza(pizza_id, new_name) when is_binary(pizza_id) and is_binary(new_name) do
+    rename_pizza(__MODULE__, pizza_id, new_name)
+  end
+
+  def rename_pizza(server, pizza_id, new_name),
+    do: GenServer.call(server, {:rename, pizza_id, new_name})
 
   def list_pizzas(list_type, order) do
     list_pizzas(__MODULE__, list_type, order)
@@ -41,13 +56,36 @@ defmodule Pizza.Application.Dispatcher do
   end
 
   @impl true
-  def handle_call({:save_pizza, attrs}, _from, state) do
-    with {:ok, pizza} <- build_pizza(attrs),
-         {:ok, version} <- EventStoreProcess.next_version(state.event_store, pizza),
-         {:ok, event} <- build_event(pizza, state.clock, version),
-         {:ok, _} <- EventStoreProcess.store(state.event_store, event),
-         {:ok, _} <- PizzaProjectionProcess.save(state.pizza_projection, event) do
+  def handle_call({:create_pizza, name, price}, _from, state) do
+    with {:ok, pizza, domain_events} <- Pizza.new(name, price),
+         {:ok, cloud_events} <- build_cloud_events(domain_events, pizza, state.clock, pizza.version + 1),
+         :ok <- store_events(state.event_store, cloud_events),
+         :ok <- update_projections(state.pizza_projection, cloud_events) do
       {:reply, {:ok, pizza}, state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:change_price, pizza_id, new_price}, _from, state) do
+    with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
+         {:ok, updated_pizza, domain_events} <- Pizza.change_price(pizza, new_price),
+         {:ok, cloud_events} <- build_cloud_events(domain_events, updated_pizza, state.clock, pizza.version + 1),
+         :ok <- store_events(state.event_store, cloud_events),
+         :ok <- update_projections(state.pizza_projection, cloud_events) do
+      {:reply, {:ok, updated_pizza}, state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:rename, pizza_id, new_name}, _from, state) do
+    with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
+         {:ok, updated_pizza, domain_events} <- Pizza.rename(pizza, new_name),
+         {:ok, cloud_events} <- build_cloud_events(domain_events, updated_pizza, state.clock, pizza.version + 1),
+         :ok <- store_events(state.event_store, cloud_events),
+         :ok <- update_projections(state.pizza_projection, cloud_events) do
+      {:reply, {:ok, updated_pizza}, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -58,23 +96,47 @@ defmodule Pizza.Application.Dispatcher do
     {:reply, reply, state}
   end
 
-  defp build_pizza(%{name: name, price: price}) do
-    Pizza.new(name, price)
+
+
+  defp build_cloud_events(domain_events, pizza, clock, version) do
+    cloud_events =
+      domain_events
+      |> Enum.with_index(version)
+      |> Enum.map(fn {domain_event, v} ->
+        to_cloud_event(domain_event, pizza, clock.(), v)
+      end)
+
+    {:ok, cloud_events}
   end
 
-  defp build_pizza(_), do: {:error, :invalid_payload}
+  defp to_cloud_event(%Events.PizzaCreated{} = event, _pizza, time, version) do
+    CloudEvent.new_v1(:pizza_app, :pizza_created, time, event, version)
+  end
 
-  defp build_event(%Pizza{} = pizza, clock, version) do
-    event =
-      CloudEvent.new_v1(
-        :pizza_app,
-        :pizza_saved,
-        clock.(),
-        pizza,
-        version
-      )
+  defp to_cloud_event(%Events.PriceChanged{} = event, _pizza, time, version) do
+    CloudEvent.new_v1(:pizza_app, :price_changed, time, event, version)
+  end
 
-    {:ok, event}
+  defp to_cloud_event(%Events.PizzaRenamed{} = event, _pizza, time, version) do
+    CloudEvent.new_v1(:pizza_app, :pizza_renamed, time, event, version)
+  end
+
+  defp store_events(event_store, cloud_events) do
+    Enum.reduce_while(cloud_events, :ok, fn event, _acc ->
+      case EventStoreProcess.store(event_store, event) do
+        {:ok, _} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp update_projections(pizza_projection, cloud_events) do
+    Enum.reduce_while(cloud_events, :ok, fn event, _acc ->
+      case PizzaProjectionProcess.save(pizza_projection, event) do
+        {:ok, _} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp list(pizza_projection, :alphabetical, order),
@@ -87,4 +149,19 @@ defmodule Pizza.Application.Dispatcher do
     do: PizzaProjectionProcess.list_by_price(pizza_projection, order)
 
   defp list(_projection, _list_type, _order), do: {:error, :unknown_list_type}
+
+  defp load_pizza(event_store, pizza_id) when is_binary(pizza_id) do
+    stream_id = "pizza-#{pizza_id}"
+
+    with {:ok, cloud_events} <- EventStoreProcess.get_stream(event_store, stream_id),
+         {:ok, domain_events} <- unwrap_domain_events(cloud_events),
+         {:ok, pizza} <- Pizza.from_history(domain_events) do
+      {:ok, pizza}
+    end
+  end
+
+  defp unwrap_domain_events(cloud_events) do
+    domain_events = Enum.map(cloud_events, & &1.data)
+    {:ok, domain_events}
+  end
 end

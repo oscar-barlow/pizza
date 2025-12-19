@@ -5,7 +5,7 @@ defmodule Pizza.Adapters.EncoderTest do
   alias Pizza.Event.CloudEvent
 
   setup do
-    pizza = %Pizza.Core.Pizza{id: "123", name: "margherita", price: 7.5}
+    pizza = %Pizza.Core.Pizza{id: "123", name: "margherita", price: 7.5, version: 0}
     {:ok, pizza: pizza}
   end
 
@@ -25,14 +25,13 @@ defmodule Pizza.Adapters.EncoderTest do
       assert encoded["type"] == "create_pizza"
       assert encoded["time"] == DateTime.to_iso8601(time)
 
-      assert encoded["data"] == %{"id" => "123", "name" => "margherita", "price" => 7.5}
+      assert encoded["data"] == %{"id" => "123", "name" => "margherita", "price" => 7.5, "version" => 0}
     end
   end
 
   describe "decoding cloud events" do
     test "reconstructs the original CloudEvent", %{pizza: pizza} do
       time = DateTime.utc_now() |> DateTime.truncate(:second)
-      pizza = %Pizza.Core.Pizza{id: "123", name: "margherita", price: 7.5}
       event = CloudEvent.new_v1(:cli, :create_pizza, time, pizza, 1)
 
       payload = Encoder.encode_cloud_event(event)
