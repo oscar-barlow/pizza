@@ -9,7 +9,7 @@ defmodule Pizza.Adapters.EventStoreTest do
     event_store = EventStore.default()
     Test.RepositoryHelper.clear_tables()
 
-    {:ok, pizza, _events} = Pizza.new("margherita", 7.5)
+    {:ok, pizza, [event]} = Pizza.new("margherita", 7.5)
     time = DateTime.utc_now()
 
     cloud_event =
@@ -17,7 +17,7 @@ defmodule Pizza.Adapters.EventStoreTest do
         :test,
         :create_pizza,
         time,
-        pizza,
+        event,
         1
       )
 

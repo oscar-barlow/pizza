@@ -42,3 +42,16 @@ defmodule Pizza.Events.PizzaRenamed do
           version: pos_integer()
         }
 end
+
+defmodule Pizza.Events.PizzaDeleted do
+  @moduledoc false
+
+  @enforce_keys [:pizza_id, :occurred_at, :version]
+  defstruct [:pizza_id, :occurred_at, :version]
+
+  @type t :: %__MODULE__{
+          pizza_id: String.t(),
+          occurred_at: DateTime.t(),
+          version: pos_integer()
+        }
+end

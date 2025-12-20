@@ -103,12 +103,15 @@ defmodule Pizza.Adapters.Encoder do
 
   defp normalise_version(_), do: {:error, :invalid_version}
 
+  # Note: Projections return Pizza structs with empty history.
+  # History is only populated during event sourcing reconstitution for command handling.
+  # TODO: Consider creating a separate PizzaView struct for read models.
   defp decode(%{"id" => id, "name" => name, "price" => price, "version" => version}) do
-    {:ok, %Pizza{id: id, name: name, price: price, version: version}}
+    {:ok, %Pizza{id: id, name: name, price: price, version: version, history: []}}
   end
 
   defp decode(%{"id" => id, "name" => name, "price" => price}) do
-    {:ok, %Pizza{id: id, name: name, price: price, version: 0}}
+    {:ok, %Pizza{id: id, name: name, price: price, version: 0, history: []}}
   end
 
   defp decode(%{"pizza_id" => pizza_id, "name" => name, "price" => price, "occurred_at" => occurred_at, "version" => version}) do

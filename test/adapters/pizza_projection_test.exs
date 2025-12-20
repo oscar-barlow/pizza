@@ -180,7 +180,8 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
     end
   end
 
-  defp with_version(%Pizza.Core.Pizza{} = pizza, version), do: %{pizza | version: version}
+  # Projections don't store history, so clear it for comparison
+  defp with_version(%Pizza.Core.Pizza{} = pizza, version), do: %{pizza | version: version, history: []}
 
   defp pizza_created_cloud_event(pizza, time, version) do
     %PizzaCreated{
