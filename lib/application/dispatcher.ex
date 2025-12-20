@@ -67,12 +67,8 @@ defmodule Pizza.Application.Dispatcher do
          {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
          :ok <- store_events(state.event_store, cloud_events) do
       pizza_id = hd(domain_events).pizza_id
-      reply =
-        case update_projections(state.pizza_projection, cloud_events) do
-          :ok -> {:ok, pizza_id}
-          {:error, reason} -> {:error, reason}
-        end
-      {:reply, reply, state}
+      publish_events(state.pizza_projection, cloud_events)
+      {:reply, {:ok, pizza_id}, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -82,8 +78,8 @@ defmodule Pizza.Application.Dispatcher do
     with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
          {:ok, domain_events} <- Pizza.change_price(pizza, new_price),
          {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
-         :ok <- store_events(state.event_store, cloud_events),
-         :ok <- update_projections(state.pizza_projection, cloud_events) do
+         :ok <- store_events(state.event_store, cloud_events) do
+      publish_events(state.pizza_projection, cloud_events)
       {:reply, :ok, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -94,8 +90,8 @@ defmodule Pizza.Application.Dispatcher do
     with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
          {:ok, domain_events} <- Pizza.rename(pizza, new_name),
          {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
-         :ok <- store_events(state.event_store, cloud_events),
-         :ok <- update_projections(state.pizza_projection, cloud_events) do
+         :ok <- store_events(state.event_store, cloud_events) do
+      publish_events(state.pizza_projection, cloud_events)
       {:reply, :ok, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -106,8 +102,8 @@ defmodule Pizza.Application.Dispatcher do
     with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
          {:ok, domain_events} <- Pizza.delete(pizza),
          {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
-         :ok <- store_events(state.event_store, cloud_events),
-         :ok <- update_projections(state.pizza_projection, cloud_events) do
+         :ok <- store_events(state.event_store, cloud_events) do
+      publish_events(state.pizza_projection, cloud_events)
       {:reply, :ok, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -156,12 +152,9 @@ defmodule Pizza.Application.Dispatcher do
     end)
   end
 
-  defp update_projections(pizza_projection, cloud_events) do
-    Enum.reduce_while(cloud_events, :ok, fn event, _acc ->
-      case PizzaProjectionProcess.save(pizza_projection, event) do
-        {:ok, _} -> {:cont, :ok}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
+  defp publish_events(pizza_projection, cloud_events) do
+    Enum.each(cloud_events, fn event ->
+      GenServer.cast(pizza_projection, {event.type, event})
     end)
   end
 
