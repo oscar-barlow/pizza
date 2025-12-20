@@ -1,20 +1,15 @@
 defmodule Pizza.Core.Pizza do
   @enforce_keys [:id, :name, :price, :version]
-  defstruct id: nil, name: nil, price: nil, version: 0, history: []
+  defstruct id: nil, name: nil, price: nil, version: 0, deleted: false
 
   alias Pizza.Events.{PizzaCreated, PriceChanged, PizzaRenamed, PizzaDeleted}
 
-  # Note: The `history` field stores the aggregate's event history during command handling.
-  # This allows the aggregate to enforce invariants based on past events (e.g., preventing
-  # operations on deleted pizzas). History is populated during event sourcing reconstitution
-  # but is NOT persisted in projections/read models (they use history: []).
-  # TODO: Consider separating command model (with history) from query model (PizzaView).
   @type t :: %__MODULE__{
           id: String.t(),
           name: String.t(),
           price: float(),
           version: integer(),
-          history: list(domain_event())
+          deleted: boolean()
         }
   @type domain_event :: PizzaCreated.t() | PriceChanged.t() | PizzaRenamed.t() | PizzaDeleted.t()
 
@@ -31,9 +26,7 @@ defmodule Pizza.Core.Pizza do
       version: version
     }
 
-    pizza = %__MODULE__{id: id, name: name, price: price, version: version, history: [event]}
-
-    {:ok, pizza, [event]}
+    {:ok, [event]}
   end
 
   def new("", _price), do: {:error, :empty_name}
@@ -46,7 +39,6 @@ defmodule Pizza.Core.Pizza do
     with :ok <- validate_not_deleted(pizza),
          :ok <- validate_price_change(pizza.price, new_price) do
       next_version = pizza.version + 1
-      updated = %{pizza | price: new_price, version: next_version}
 
       event = %PriceChanged{
         pizza_id: pizza.id,
@@ -56,7 +48,7 @@ defmodule Pizza.Core.Pizza do
         version: next_version
       }
 
-      {:ok, updated, [event]}
+      {:ok, [event]}
     end
   end
 
@@ -67,7 +59,6 @@ defmodule Pizza.Core.Pizza do
       when is_binary(new_name) and byte_size(new_name) > 0 do
     with :ok <- validate_not_deleted(pizza) do
       next_version = pizza.version + 1
-      updated = %{pizza | name: new_name, version: next_version}
 
       event = %PizzaRenamed{
         pizza_id: pizza.id,
@@ -77,7 +68,7 @@ defmodule Pizza.Core.Pizza do
         version: next_version
       }
 
-      {:ok, updated, [event]}
+      {:ok, [event]}
     end
   end
 
@@ -87,7 +78,6 @@ defmodule Pizza.Core.Pizza do
   def delete(%__MODULE__{} = pizza) do
     with :ok <- validate_not_deleted(pizza) do
       next_version = pizza.version + 1
-      updated = %{pizza | version: next_version}
 
       event = %PizzaDeleted{
         pizza_id: pizza.id,
@@ -95,7 +85,7 @@ defmodule Pizza.Core.Pizza do
         version: next_version
       }
 
-      {:ok, updated, [event]}
+      {:ok, [event]}
     end
   end
 
@@ -116,29 +106,29 @@ defmodule Pizza.Core.Pizza do
     end)
   end
 
-  defp apply_event(%PizzaCreated{pizza_id: id, name: name, price: price, version: version} = event, nil) do
-    pizza = %__MODULE__{id: id, name: name, price: price, version: version, history: [event]}
+  defp apply_event(%PizzaCreated{pizza_id: id, name: name, price: price, version: version}, nil) do
+    pizza = %__MODULE__{id: id, name: name, price: price, version: version, deleted: false}
     {:ok, pizza}
   end
 
   defp apply_event(%PizzaCreated{}, %__MODULE__{}), do: {:error, :invalid_history}
 
-  defp apply_event(%PriceChanged{new_price: new_price, version: version} = event, %__MODULE__{} = pizza) do
-    {:ok, %{pizza | price: new_price, version: version, history: pizza.history ++ [event]}}
+  defp apply_event(%PriceChanged{new_price: new_price, version: version}, %__MODULE__{} = pizza) do
+    {:ok, %{pizza | price: new_price, version: version}}
   end
 
-  defp apply_event(%PizzaRenamed{new_name: new_name, version: version} = event, %__MODULE__{} = pizza) do
-    {:ok, %{pizza | name: new_name, version: version, history: pizza.history ++ [event]}}
+  defp apply_event(%PizzaRenamed{new_name: new_name, version: version}, %__MODULE__{} = pizza) do
+    {:ok, %{pizza | name: new_name, version: version}}
   end
 
-  defp apply_event(%PizzaDeleted{version: version} = event, %__MODULE__{} = pizza) do
-    {:ok, %{pizza | version: version, history: pizza.history ++ [event]}}
+  defp apply_event(%PizzaDeleted{version: version}, %__MODULE__{} = pizza) do
+    {:ok, %{pizza | version: version, deleted: true}}
   end
 
   defp apply_event(_, _), do: {:error, :invalid_history}
 
-  defp validate_not_deleted(%__MODULE__{history: history}) do
-    case Enum.any?(history, fn event -> match?(%PizzaDeleted{}, event) end) do
+  defp validate_not_deleted(%__MODULE__{deleted: deleted}) do
+    case deleted do
       true -> {:error, :pizza_deleted}
       false -> :ok
     end

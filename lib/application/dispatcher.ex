@@ -33,6 +33,12 @@ defmodule Pizza.Application.Dispatcher do
   def rename_pizza(server, pizza_id, new_name),
     do: GenServer.call(server, {:rename, pizza_id, new_name})
 
+  def delete_pizza(pizza_id) when is_binary(pizza_id) do
+    delete_pizza(__MODULE__, pizza_id)
+  end
+
+  def delete_pizza(server, pizza_id), do: GenServer.call(server, {:delete, pizza_id})
+
   def list_pizzas(list_type, order) do
     list_pizzas(__MODULE__, list_type, order)
   end
@@ -57,11 +63,16 @@ defmodule Pizza.Application.Dispatcher do
 
   @impl true
   def handle_call({:create_pizza, name, price}, _from, state) do
-    with {:ok, pizza, domain_events} <- Pizza.new(name, price),
+    with {:ok, domain_events} <- Pizza.new(name, price),
          {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
-         :ok <- store_events(state.event_store, cloud_events),
-         :ok <- update_projections(state.pizza_projection, cloud_events) do
-      {:reply, {:ok, pizza}, state}
+         :ok <- store_events(state.event_store, cloud_events) do
+      pizza_id = hd(domain_events).pizza_id
+      reply =
+        case update_projections(state.pizza_projection, cloud_events) do
+          :ok -> {:ok, pizza_id}
+          {:error, reason} -> {:error, reason}
+        end
+      {:reply, reply, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -69,11 +80,11 @@ defmodule Pizza.Application.Dispatcher do
 
   def handle_call({:change_price, pizza_id, new_price}, _from, state) do
     with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
-         {:ok, updated_pizza, domain_events} <- Pizza.change_price(pizza, new_price),
+         {:ok, domain_events} <- Pizza.change_price(pizza, new_price),
          {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
          :ok <- store_events(state.event_store, cloud_events),
          :ok <- update_projections(state.pizza_projection, cloud_events) do
-      {:reply, {:ok, updated_pizza}, state}
+      {:reply, :ok, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -81,11 +92,23 @@ defmodule Pizza.Application.Dispatcher do
 
   def handle_call({:rename, pizza_id, new_name}, _from, state) do
     with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
-         {:ok, updated_pizza, domain_events} <- Pizza.rename(pizza, new_name),
+         {:ok, domain_events} <- Pizza.rename(pizza, new_name),
          {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
          :ok <- store_events(state.event_store, cloud_events),
          :ok <- update_projections(state.pizza_projection, cloud_events) do
-      {:reply, {:ok, updated_pizza}, state}
+      {:reply, :ok, state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:delete, pizza_id}, _from, state) do
+    with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
+         {:ok, domain_events} <- Pizza.delete(pizza),
+         {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
+         :ok <- store_events(state.event_store, cloud_events),
+         :ok <- update_projections(state.pizza_projection, cloud_events) do
+      {:reply, :ok, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -118,6 +141,10 @@ defmodule Pizza.Application.Dispatcher do
 
   defp to_cloud_event(%Events.PizzaRenamed{version: version} = event, time) do
     CloudEvent.new_v1(:pizza_app, :pizza_renamed, time, event, version)
+  end
+
+  defp to_cloud_event(%Events.PizzaDeleted{version: version} = event, time) do
+    CloudEvent.new_v1(:pizza_app, :pizza_deleted, time, event, version)
   end
 
   defp store_events(event_store, cloud_events) do

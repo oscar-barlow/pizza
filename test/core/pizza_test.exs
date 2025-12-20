@@ -1,6 +1,6 @@
 defmodule Pizza.Core.PizzaTest do
   use ExUnit.Case
-  alias Pizza.Events.{PizzaCreated, PriceChanged, PizzaRenamed}
+  alias Pizza.Events.{PizzaCreated, PriceChanged, PizzaRenamed, PizzaDeleted}
   alias Pizza.Core.Pizza
 
   describe "pizza creation" do
@@ -11,8 +11,7 @@ defmodule Pizza.Core.PizzaTest do
     end
 
     test "creates pizza with valid name and price" do
-      assert {:ok, %Pizza{name: "Margherita", price: 12.50}, [event]} =
-               Pizza.new("Margherita", 12.50)
+      assert {:ok, [event]} = Pizza.new("Margherita", 12.50)
 
       assert %PizzaCreated{name: "Margherita", price: 12.50} = event
     end
@@ -43,48 +42,52 @@ defmodule Pizza.Core.PizzaTest do
 
   describe "price changes" do
     test "allows reasonable price increase" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
-      assert {:ok, updated, [event]} = Pizza.change_price(pizza, 14.0)
-      assert updated.price == 14.0
+      assert {:ok, [event]} = Pizza.change_price(pizza, 14.0)
       assert %PriceChanged{old_price: 10.0, new_price: 14.0} = event
     end
 
     test "allows price decrease" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
-      assert {:ok, updated, [event]} = Pizza.change_price(pizza, 8.0)
-      assert updated.price == 8.0
+      assert {:ok, [event]} = Pizza.change_price(pizza, 8.0)
       assert %PriceChanged{old_price: 10.0, new_price: 8.0} = event
     end
 
     test "rejects excessive price increase" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
       assert {:error, :price_increase_too_large} = Pizza.change_price(pizza, 20.0)
     end
 
     test "allows price increase at exactly 50% limit" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
-      assert {:ok, updated, [_event]} = Pizza.change_price(pizza, 15.0)
-      assert updated.price == 15.0
+      assert {:ok, [_event]} = Pizza.change_price(pizza, 15.0)
     end
 
     test "returns error for negative price" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
       assert {:error, :negative_price} == Pizza.change_price(pizza, -5.0)
     end
 
     test "returns error for zero price" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
       assert {:error, :negative_price} == Pizza.change_price(pizza, 0)
     end
 
     test "returns error for non-numeric price" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
       assert {:error, :invalid_price} == Pizza.change_price(pizza, "expensive")
     end
@@ -92,24 +95,64 @@ defmodule Pizza.Core.PizzaTest do
 
   describe "renaming" do
     test "allows pizza to be renamed" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
-      assert {:ok, updated, [event]} = Pizza.rename(pizza, "Margherita Supreme")
-      assert updated.name == "Margherita Supreme"
+      assert {:ok, [event]} = Pizza.rename(pizza, "Margherita Supreme")
       assert %PizzaRenamed{old_name: "Margherita", new_name: "Margherita Supreme"} = event
     end
 
     test "returns error for empty name" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
       assert {:error, :empty_name} == Pizza.rename(pizza, "")
     end
 
     test "returns error for non-string name" do
-      {:ok, pizza, _} = Pizza.new("Margherita", 10.0)
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
 
       assert {:error, :invalid_name} == Pizza.rename(pizza, 123)
       assert {:error, :invalid_name} == Pizza.rename(pizza, nil)
+    end
+  end
+
+  describe "deleting pizzas" do
+    test "allows pizza to be deleted" do
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
+
+      assert {:ok, [event]} = Pizza.delete(pizza)
+      assert %PizzaDeleted{} = event
+      assert event.pizza_id == pizza.id
+    end
+
+    test "prevents price changes on deleted pizzas" do
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
+      {:ok, [deleted_event]} = Pizza.delete(pizza)
+      {:ok, deleted} = Pizza.from_history([created_event, deleted_event])
+
+      assert {:error, :pizza_deleted} = Pizza.change_price(deleted, 12.0)
+    end
+
+    test "prevents renaming deleted pizzas" do
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
+      {:ok, [deleted_event]} = Pizza.delete(pizza)
+      {:ok, deleted} = Pizza.from_history([created_event, deleted_event])
+
+      assert {:error, :pizza_deleted} = Pizza.rename(deleted, "New Name")
+    end
+
+    test "prevents deleting already deleted pizzas" do
+      {:ok, [created_event]} = Pizza.new("Margherita", 10.0)
+      {:ok, pizza} = Pizza.from_history([created_event])
+      {:ok, [deleted_event]} = Pizza.delete(pizza)
+      {:ok, deleted} = Pizza.from_history([created_event, deleted_event])
+
+      assert {:error, :pizza_deleted} = Pizza.delete(deleted)
     end
   end
 
@@ -267,6 +310,32 @@ defmodule Pizza.Core.PizzaTest do
 
       # Version should be exactly what the event says, not calculated
       assert pizza.version == 2
+    end
+
+    test "reconstitutes deleted pizza and enforces invariants" do
+      time = DateTime.utc_now()
+
+      events = [
+        %PizzaCreated{
+          pizza_id: "pizza-deleted",
+          name: "Deleted Pizza",
+          price: 10.0,
+          occurred_at: time,
+          version: 1
+        },
+        %PizzaDeleted{
+          pizza_id: "pizza-deleted",
+          occurred_at: DateTime.add(time, 60),
+          version: 2
+        }
+      ]
+
+      {:ok, pizza} = Pizza.from_history(events)
+
+      assert pizza.version == 2
+      assert {:error, :pizza_deleted} = Pizza.change_price(pizza, 12.0)
+      assert {:error, :pizza_deleted} = Pizza.rename(pizza, "New Name")
+      assert {:error, :pizza_deleted} = Pizza.delete(pizza)
     end
   end
 end

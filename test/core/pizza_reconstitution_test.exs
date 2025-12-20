@@ -34,12 +34,12 @@ defmodule Pizza.Core.PizzaReconstitutionTest do
           name: :"dispatcher_#{inspect(self())}"
         )
 
-      {:ok, created_pizza} = Dispatcher.create_pizza(dispatcher, "Margherita", 10.0)
+      {:ok, pizza_id} = Dispatcher.create_pizza(dispatcher, "Margherita", 10.0)
 
-      assert {:ok, events} = domain_events_for(event_store, created_pizza.id)
+      assert {:ok, events} = domain_events_for(event_store, pizza_id)
       assert {:ok, loaded_pizza} = Pizza.from_history(events)
 
-      assert loaded_pizza.id == created_pizza.id
+      assert loaded_pizza.id == pizza_id
       assert loaded_pizza.name == "Margherita"
       assert loaded_pizza.price == 10.0
       assert loaded_pizza.version == 1
@@ -56,14 +56,14 @@ defmodule Pizza.Core.PizzaReconstitutionTest do
           name: :"dispatcher_#{inspect(self())}"
         )
 
-      {:ok, created_pizza} = Dispatcher.create_pizza(dispatcher, "Funghi", 8.0)
-      {:ok, _} = Dispatcher.change_pizza_price(dispatcher, created_pizza.id, 9.0)
-      {:ok, _} = Dispatcher.rename_pizza(dispatcher, created_pizza.id, "Mushroom Special")
+      {:ok, pizza_id} = Dispatcher.create_pizza(dispatcher, "Funghi", 8.0)
+      :ok = Dispatcher.change_pizza_price(dispatcher, pizza_id, 9.0)
+      :ok = Dispatcher.rename_pizza(dispatcher, pizza_id, "Mushroom Special")
 
-      assert {:ok, events} = domain_events_for(event_store, created_pizza.id)
+      assert {:ok, events} = domain_events_for(event_store, pizza_id)
       assert {:ok, loaded_pizza} = Pizza.from_history(events)
 
-      assert loaded_pizza.id == created_pizza.id
+      assert loaded_pizza.id == pizza_id
       assert loaded_pizza.name == "Mushroom Special"
       assert loaded_pizza.price == 9.0
       assert loaded_pizza.version == 3

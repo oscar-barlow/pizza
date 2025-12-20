@@ -8,16 +8,10 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
   setup_all do
     pizza_projection = PizzaProjection.default()
 
-    {:ok, pizza, _events} = Pizza.Core.Pizza.new("margherita", 7.5)
+    {:ok, [pizza_created_event]} = Pizza.Core.Pizza.new("margherita", 7.5)
     time = DateTime.utc_now()
 
-    pizza_created_event = %PizzaCreated{
-      pizza_id: pizza.id,
-      name: pizza.name,
-      price: pizza.price,
-      occurred_at: time,
-      version: 1
-    }
+    {:ok, pizza} = Pizza.Core.Pizza.from_history([pizza_created_event])
 
     cloud_event =
       CloudEvent.new_v1(:test, :pizza_created, time, pizza_created_event, 1)
@@ -86,12 +80,14 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       Test.RepositoryHelper.clear_tables()
       PizzaProjection.save(pizza_projection, cloud_event)
 
-      {:ok, funghi, _events} = Pizza.Core.Pizza.new("funghi", 8)
+      {:ok, [funghi_created_event]} = Pizza.Core.Pizza.new("funghi", 8)
+      {:ok, funghi} = Pizza.Core.Pizza.from_history([funghi_created_event])
 
       funghi_event =
         pizza_created_cloud_event(funghi, DateTime.shift(time, minute: 1), 1)
 
-      {:ok, pepperoni, _events} = Pizza.Core.Pizza.new("pepperoni", 10)
+      {:ok, [pepperoni_created_event]} = Pizza.Core.Pizza.new("pepperoni", 10)
+      {:ok, pepperoni} = Pizza.Core.Pizza.from_history([pepperoni_created_event])
 
       pepperoni_event =
         pizza_created_cloud_event(pepperoni, DateTime.shift(time, minute: 2), 1)
@@ -180,8 +176,7 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
     end
   end
 
-  # Projections don't store history, so clear it for comparison
-  defp with_version(%Pizza.Core.Pizza{} = pizza, version), do: %{pizza | version: version, history: []}
+  defp with_version(%Pizza.Core.Pizza{} = pizza, version), do: %{pizza | version: version}
 
   defp pizza_created_cloud_event(pizza, time, version) do
     %PizzaCreated{

@@ -6,20 +6,20 @@ defmodule Pizza.Adapters.EventTest do
 
   describe "when creating a cloud event" do
     test "builds a cloud event when the version is positive" do
-      {:ok, pizza, _events} = Pizza.new("Margherita", 12.5)
+      {:ok, [pizza_created_event]} = Pizza.new("Margherita", 12.5)
       now = DateTime.utc_now()
 
-      event = CloudEvent.new_v1(:cli, :create_pizza, now, pizza, 1)
+      event = CloudEvent.new_v1(:cli, :create_pizza, now, pizza_created_event, 1)
 
-      assert %CloudEvent{version: 1, time: ^now, data: ^pizza} = event
+      assert %CloudEvent{version: 1, time: ^now, data: ^pizza_created_event} = event
     end
 
     test "raises when the version is not a positive integer" do
-      {:ok, pizza, _events} = Pizza.new("Margherita", 12.5)
+      {:ok, [pizza_created_event]} = Pizza.new("Margherita", 12.5)
       now = DateTime.utc_now()
 
       assert_raise ArgumentError, "cloud events require positive integer versions", fn ->
-        CloudEvent.new_v1(:cli, :create_pizza, now, pizza, 0)
+        CloudEvent.new_v1(:cli, :create_pizza, now, pizza_created_event, 0)
       end
     end
   end
