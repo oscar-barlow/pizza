@@ -58,7 +58,7 @@ defmodule Pizza.Application.Dispatcher do
   @impl true
   def handle_call({:create_pizza, name, price}, _from, state) do
     with {:ok, pizza, domain_events} <- Pizza.new(name, price),
-         {:ok, cloud_events} <- build_cloud_events(domain_events, pizza, state.clock, pizza.version + 1),
+         {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
          :ok <- store_events(state.event_store, cloud_events),
          :ok <- update_projections(state.pizza_projection, cloud_events) do
       {:reply, {:ok, pizza}, state}
@@ -70,7 +70,7 @@ defmodule Pizza.Application.Dispatcher do
   def handle_call({:change_price, pizza_id, new_price}, _from, state) do
     with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
          {:ok, updated_pizza, domain_events} <- Pizza.change_price(pizza, new_price),
-         {:ok, cloud_events} <- build_cloud_events(domain_events, updated_pizza, state.clock, pizza.version + 1),
+         {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
          :ok <- store_events(state.event_store, cloud_events),
          :ok <- update_projections(state.pizza_projection, cloud_events) do
       {:reply, {:ok, updated_pizza}, state}
@@ -82,7 +82,7 @@ defmodule Pizza.Application.Dispatcher do
   def handle_call({:rename, pizza_id, new_name}, _from, state) do
     with {:ok, pizza} <- load_pizza(state.event_store, pizza_id),
          {:ok, updated_pizza, domain_events} <- Pizza.rename(pizza, new_name),
-         {:ok, cloud_events} <- build_cloud_events(domain_events, updated_pizza, state.clock, pizza.version + 1),
+         {:ok, cloud_events} <- build_cloud_events(domain_events, state.clock),
          :ok <- store_events(state.event_store, cloud_events),
          :ok <- update_projections(state.pizza_projection, cloud_events) do
       {:reply, {:ok, updated_pizza}, state}
@@ -98,26 +98,25 @@ defmodule Pizza.Application.Dispatcher do
 
 
 
-  defp build_cloud_events(domain_events, pizza, clock, version) do
+  defp build_cloud_events(domain_events, clock) do
     cloud_events =
       domain_events
-      |> Enum.with_index(version)
-      |> Enum.map(fn {domain_event, v} ->
-        to_cloud_event(domain_event, pizza, clock.(), v)
+      |> Enum.map(fn domain_event ->
+        to_cloud_event(domain_event, clock.())
       end)
 
     {:ok, cloud_events}
   end
 
-  defp to_cloud_event(%Events.PizzaCreated{} = event, _pizza, time, version) do
+  defp to_cloud_event(%Events.PizzaCreated{version: version} = event, time) do
     CloudEvent.new_v1(:pizza_app, :pizza_created, time, event, version)
   end
 
-  defp to_cloud_event(%Events.PriceChanged{} = event, _pizza, time, version) do
+  defp to_cloud_event(%Events.PriceChanged{version: version} = event, time) do
     CloudEvent.new_v1(:pizza_app, :price_changed, time, event, version)
   end
 
-  defp to_cloud_event(%Events.PizzaRenamed{} = event, _pizza, time, version) do
+  defp to_cloud_event(%Events.PizzaRenamed{version: version} = event, time) do
     CloudEvent.new_v1(:pizza_app, :pizza_renamed, time, event, version)
   end
 

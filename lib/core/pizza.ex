@@ -10,13 +10,15 @@ defmodule Pizza.Core.Pizza do
   def new(name, price)
       when is_binary(name) and byte_size(name) > 0 and is_number(price) and price > 0 do
     id = UUID.uuid4()
-    pizza = %__MODULE__{id: id, name: name, price: price, version: 0}
+    version = 1
+    pizza = %__MODULE__{id: id, name: name, price: price, version: version}
 
     event = %PizzaCreated{
       pizza_id: id,
       name: name,
       price: price,
-      occurred_at: DateTime.utc_now()
+      occurred_at: DateTime.utc_now(),
+      version: version
     }
 
     {:ok, pizza, [event]}
@@ -30,13 +32,15 @@ defmodule Pizza.Core.Pizza do
   def change_price(%__MODULE__{} = pizza, new_price)
       when is_number(new_price) and new_price > 0 do
     with :ok <- validate_price_change(pizza.price, new_price) do
-      updated = %{pizza | price: new_price}
+      next_version = pizza.version + 1
+      updated = %{pizza | price: new_price, version: next_version}
 
       event = %PriceChanged{
         pizza_id: pizza.id,
         old_price: pizza.price,
         new_price: new_price,
-        occurred_at: DateTime.utc_now()
+        occurred_at: DateTime.utc_now(),
+        version: next_version
       }
 
       {:ok, updated, [event]}
@@ -48,13 +52,15 @@ defmodule Pizza.Core.Pizza do
 
   def rename(%__MODULE__{} = pizza, new_name)
       when is_binary(new_name) and byte_size(new_name) > 0 do
-    updated = %{pizza | name: new_name}
+    next_version = pizza.version + 1
+    updated = %{pizza | name: new_name, version: next_version}
 
     event = %PizzaRenamed{
       pizza_id: pizza.id,
       old_name: pizza.name,
       new_name: new_name,
-      occurred_at: DateTime.utc_now()
+      occurred_at: DateTime.utc_now(),
+      version: next_version
     }
 
     {:ok, updated, [event]}
@@ -80,19 +86,19 @@ defmodule Pizza.Core.Pizza do
     end)
   end
 
-  defp apply_event(%PizzaCreated{pizza_id: id, name: name, price: price}, nil) do
-    pizza = %__MODULE__{id: id, name: name, price: price, version: 1}
+  defp apply_event(%PizzaCreated{pizza_id: id, name: name, price: price, version: version}, nil) do
+    pizza = %__MODULE__{id: id, name: name, price: price, version: version}
     {:ok, pizza}
   end
 
   defp apply_event(%PizzaCreated{}, %__MODULE__{}), do: {:error, :invalid_history}
 
-  defp apply_event(%PriceChanged{new_price: new_price}, %__MODULE__{} = pizza) do
-    {:ok, %{pizza | price: new_price, version: pizza.version + 1}}
+  defp apply_event(%PriceChanged{new_price: new_price, version: version}, %__MODULE__{} = pizza) do
+    {:ok, %{pizza | price: new_price, version: version}}
   end
 
-  defp apply_event(%PizzaRenamed{new_name: new_name}, %__MODULE__{} = pizza) do
-    {:ok, %{pizza | name: new_name, version: pizza.version + 1}}
+  defp apply_event(%PizzaRenamed{new_name: new_name, version: version}, %__MODULE__{} = pizza) do
+    {:ok, %{pizza | name: new_name, version: version}}
   end
 
   defp apply_event(_, _), do: {:error, :invalid_history}

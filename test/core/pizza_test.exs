@@ -112,4 +112,161 @@ defmodule Pizza.Core.PizzaTest do
       assert {:error, :invalid_name} == Pizza.rename(pizza, nil)
     end
   end
+
+  describe "reconstituting from event history" do
+    test "reconstitutes pizza from single creation event" do
+      time = DateTime.utc_now()
+
+      events = [
+        %PizzaCreated{
+          pizza_id: "pizza-123",
+          name: "Margherita",
+          price: 10.0,
+          occurred_at: time,
+          version: 1
+        }
+      ]
+
+      assert {:ok, pizza} = Pizza.from_history(events)
+      assert pizza.id == "pizza-123"
+      assert pizza.name == "Margherita"
+      assert pizza.price == 10.0
+      assert pizza.version == 1
+    end
+
+    test "reconstitutes pizza from multiple events" do
+      time = DateTime.utc_now()
+
+      events = [
+        %PizzaCreated{
+          pizza_id: "pizza-456",
+          name: "Funghi",
+          price: 8.0,
+          occurred_at: time,
+          version: 1
+        },
+        %PriceChanged{
+          pizza_id: "pizza-456",
+          old_price: 8.0,
+          new_price: 9.0,
+          occurred_at: DateTime.add(time, 60),
+          version: 2
+        },
+        %PizzaRenamed{
+          pizza_id: "pizza-456",
+          old_name: "Funghi",
+          new_name: "Mushroom Deluxe",
+          occurred_at: DateTime.add(time, 120),
+          version: 3
+        }
+      ]
+
+      assert {:ok, pizza} = Pizza.from_history(events)
+      assert pizza.id == "pizza-456"
+      assert pizza.name == "Mushroom Deluxe"
+      assert pizza.price == 9.0
+      assert pizza.version == 3
+    end
+
+    test "reconstitutes pizza with multiple price changes" do
+      time = DateTime.utc_now()
+
+      events = [
+        %PizzaCreated{
+          pizza_id: "pizza-789",
+          name: "Quattro Formaggi",
+          price: 12.0,
+          occurred_at: time,
+          version: 1
+        },
+        %PriceChanged{
+          pizza_id: "pizza-789",
+          old_price: 12.0,
+          new_price: 13.0,
+          occurred_at: DateTime.add(time, 60),
+          version: 2
+        },
+        %PriceChanged{
+          pizza_id: "pizza-789",
+          old_price: 13.0,
+          new_price: 14.5,
+          occurred_at: DateTime.add(time, 120),
+          version: 3
+        }
+      ]
+
+      assert {:ok, pizza} = Pizza.from_history(events)
+      assert pizza.price == 14.5
+      assert pizza.version == 3
+    end
+
+    test "returns error when event list is empty" do
+      assert {:error, :not_found} = Pizza.from_history([])
+    end
+
+    test "returns error when PizzaCreated is not the first event" do
+      time = DateTime.utc_now()
+
+      events = [
+        %PriceChanged{
+          pizza_id: "pizza-bad",
+          old_price: 10.0,
+          new_price: 12.0,
+          occurred_at: time,
+          version: 1
+        }
+      ]
+
+      assert {:error, :invalid_history} = Pizza.from_history(events)
+    end
+
+    test "returns error when multiple PizzaCreated events exist" do
+      time = DateTime.utc_now()
+
+      events = [
+        %PizzaCreated{
+          pizza_id: "pizza-duplicate",
+          name: "First",
+          price: 10.0,
+          occurred_at: time,
+          version: 1
+        },
+        %PizzaCreated{
+          pizza_id: "pizza-duplicate",
+          name: "Second",
+          price: 12.0,
+          occurred_at: DateTime.add(time, 60),
+          version: 2
+        }
+      ]
+
+      assert {:error, :invalid_history} = Pizza.from_history(events)
+    end
+
+    test "version comes from events, not calculated during replay" do
+      time = DateTime.utc_now()
+
+      events = [
+        %PizzaCreated{
+          pizza_id: "pizza-version-test",
+          name: "Version Test",
+          price: 10.0,
+          occurred_at: time,
+          version: 1
+        },
+        %PriceChanged{
+          pizza_id: "pizza-version-test",
+          old_price: 10.0,
+          new_price: 12.0,
+          occurred_at: DateTime.add(time, 60),
+          version: 2
+        }
+      ]
+
+      {:ok, pizza} = Pizza.from_history(events)
+
+      # Version should be exactly what the event says, not calculated
+      assert pizza.version == 2
+    end
+  end
 end

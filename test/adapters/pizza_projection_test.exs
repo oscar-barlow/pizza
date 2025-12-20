@@ -15,7 +15,8 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       pizza_id: pizza.id,
       name: pizza.name,
       price: pizza.price,
-      occurred_at: time
+      occurred_at: time,
+      version: 1
     }
 
     cloud_event =
@@ -46,7 +47,8 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
         pizza_id: pizza.id,
         name: String.reverse(pizza.name),
         price: pizza.price * 2,
-        occurred_at: cloud_event.time
+        occurred_at: cloud_event.time,
+        version: 1
       }
 
       changed_cloud_event =
@@ -185,7 +187,8 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       pizza_id: pizza.id,
       name: pizza.name,
       price: pizza.price,
-      occurred_at: time
+      occurred_at: time,
+      version: version
     }
     |> then(&CloudEvent.new_v1(:test, :pizza_created, time, &1, version))
   end
@@ -195,7 +198,8 @@ defmodule Pizza.Adapters.PizzaProjectionTest do
       pizza_id: pizza_id,
       old_price: old_price,
       new_price: new_price,
-      occurred_at: time
+      occurred_at: time,
+      version: version
     }
     |> then(&CloudEvent.new_v1(:test, :price_changed, time, &1, version))
   end
