@@ -34,6 +34,30 @@ defmodule Test.RepositoryHelper do
   end
 end
 
-Test.RepositoryHelper.ensure_tables!()
+defmodule Test.Eventually do
+  @default_attempts 5
+  @default_sleep_ms 20
+
+  def eventually(fun, opts \\ []) when is_function(fun, 0) and is_list(opts) do
+    attempts = Keyword.get(opts, :attempts, @default_attempts)
+    sleep_ms = Keyword.get(opts, :sleep_ms, @default_sleep_ms)
+
+    do_eventually(fun, attempts, sleep_ms)
+  end
+
+  defp do_eventually(fun, attempts, sleep_ms) when attempts > 0 do
+    try do
+      fun.()
+    rescue
+      error in [ExUnit.AssertionError] ->
+        if attempts == 1 do
+          reraise(error, __STACKTRACE__)
+        else
+          Process.sleep(sleep_ms)
+          do_eventually(fun, attempts - 1, sleep_ms)
+        end
+    end
+  end
+end
 
 ExUnit.start()

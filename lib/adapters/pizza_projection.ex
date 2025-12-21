@@ -1,5 +1,10 @@
 defmodule Pizza.Adapters.PizzaProjection do
+  @moduledoc false
+
   @behaviour Pizza.Ports.PizzaProjection
+
+  alias Pizza.Event.CloudEvent
+  alias Pizza.Events.{PizzaCreated, PriceChanged, PizzaRenamed}
 
   defstruct [:client]
 
@@ -8,19 +13,17 @@ defmodule Pizza.Adapters.PizzaProjection do
   @pizza_projection "pizza_projection"
   @all_partition "all"
 
-  alias Pizza.Event.CloudEvent
-  alias Pizza.Core.Pizza
-
   def default() do
     %__MODULE__{client: ExAws.Dynamo}
   end
 
   @impl true
   def save(%__MODULE__{client: client}, %CloudEvent{
-        data: %Pizza{} = pizza,
+        data: %PizzaCreated{} = event,
         version: version,
         time: time
       }) do
+    pizza = %Pizza.Core.Pizza{id: event.pizza_id, name: event.name, price: event.price, version: version}
     projection_item = assemble_projection(pizza, version, time)
 
     opts = [
@@ -39,8 +42,60 @@ defmodule Pizza.Adapters.PizzaProjection do
   end
 
   @impl true
+  def save(%__MODULE__{client: client} = projection, %CloudEvent{
+        data: %PriceChanged{} = event,
+        version: version,
+        time: time
+      }) do
+    case get(projection, event.pizza_id) do
+      {:ok, existing_pizza} ->
+        updated = %{existing_pizza | price: event.new_price, version: version}
+        projection_item = assemble_projection(updated, version, time)
+
+        opts = [
+          condition_expression: ":incoming_version > version",
+          expression_attribute_values: %{incoming_version: version}
+        ]
+
+        case client.put_item(@pizza_projection, projection_item, opts) |> ExAws.request() do
+          {:ok, _} -> {:ok, event.pizza_id}
+          {:error, reason} -> {:error, :write_error, format_reason(reason)}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @impl true
+  def save(%__MODULE__{client: client} = projection, %CloudEvent{
+        data: %PizzaRenamed{} = event,
+        version: version,
+        time: time
+      }) do
+    case get(projection, event.pizza_id) do
+      {:ok, existing_pizza} ->
+        updated = %{existing_pizza | name: event.new_name, version: version}
+        projection_item = assemble_projection(updated, version, time)
+
+        opts = [
+          condition_expression: ":incoming_version > version",
+          expression_attribute_values: %{incoming_version: version}
+        ]
+
+        case client.put_item(@pizza_projection, projection_item, opts) |> ExAws.request() do
+          {:ok, _} -> {:ok, event.pizza_id}
+          {:error, reason} -> {:error, :write_error, format_reason(reason)}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @impl true
   def save(_, _) do
-    {:error, :write_error, "Not a pizza"}
+    {:error, :write_error, "Unknown event type"}
   end
 
   @impl true
@@ -121,7 +176,7 @@ defmodule Pizza.Adapters.PizzaProjection do
     end
   end
 
-  defp assemble_projection(%Pizza{id: id, name: name, price: price}, version, %DateTime{} = time) do
+  defp assemble_projection(%Pizza.Core.Pizza{id: id, name: name, price: price}, version, %DateTime{} = time) do
     %{
       "id" => id,
       "version" => version,
@@ -132,21 +187,23 @@ defmodule Pizza.Adapters.PizzaProjection do
     }
   end
 
+  defp read_projection(%{"id" => id, "name" => name, "price" => price, "version" => version})
+       when is_integer(version) do
+    {:ok, %Pizza.Core.Pizza{id: id, name: name, price: price, version: version}}
+  end
+
   defp read_projection(%{"id" => id, "name" => name, "price" => price}) do
-    {:ok, %Pizza{id: id, name: name, price: price}}
+    {:ok, %Pizza.Core.Pizza{id: id, name: name, price: price, version: 0}}
   end
 
   defp read_projection(_), do: {:error, :invalid_projection}
 
   defp decode_collection({:ok, %{"Items" => items}}) do
     pizzas =
-      items
-      |> Enum.map(&ExAws.Dynamo.Decoder.decode/1)
-      |> Enum.map(&read_projection/1)
-      |> Enum.flat_map(fn
-        {:ok, pizza} -> [pizza]
-        _ -> []
-      end)
+      for item <- items,
+          decoded = ExAws.Dynamo.Decoder.decode(item),
+          {:ok, pizza} <- [read_projection(decoded)],
+          do: pizza
 
     {:ok, pizzas}
   end

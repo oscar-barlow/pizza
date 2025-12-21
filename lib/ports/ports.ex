@@ -21,6 +21,8 @@ defmodule Pizza.Ports do
     @callback store(term(), CloudEvent.t()) :: {:ok, String.t()} | {:error, :write_error}
     @callback get_event(term(), String.t(), pos_integer()) ::
                 {:ok, CloudEvent.t()} | {:error, :not_found | :read_error}
+    @callback get_stream(term(), String.t()) ::
+                {:ok, list(CloudEvent.t())} | {:error, :not_found | :read_error}
     @callback next_version(term(), term()) :: {:ok, pos_integer()} | {:error, term()}
   end
 

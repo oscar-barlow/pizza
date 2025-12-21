@@ -1,4 +1,8 @@
 defmodule Pizza.Adapters.Dynamo do
+  @moduledoc false
+
+  require Logger
+
   @attribute_type_map %{
     "S" => :string,
     "N" => :number,
@@ -18,41 +22,63 @@ defmodule Pizza.Adapters.Dynamo do
   }
 
   def convert_attribute_definitions(raw_definitions) do
-    Enum.map(raw_definitions, fn %{attribute_name: name, attribute_type: type} ->
-      {String.to_atom(name), attribute_type(type)}
+    raw_definitions
+    |> Enum.reduce_while({:ok, []}, fn %{attribute_name: name, attribute_type: type}, {:ok, acc} ->
+      case attribute_type(type) do
+        {:ok, attr_type} -> {:cont, {:ok, [{safe_to_atom(name), attr_type} | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
     end)
+    |> case do
+      {:ok, results} -> {:ok, Enum.reverse(results)}
+      error -> error
+    end
   end
 
   def convert_key_schema(raw_schema) do
-    Enum.map(raw_schema, fn %{attribute_name: name, key_type: type} ->
-      {String.to_atom(name), key_type(type)}
+    raw_schema
+    |> Enum.reduce_while({:ok, []}, fn %{attribute_name: name, key_type: type}, {:ok, acc} ->
+      case key_type(type) do
+        {:ok, k_type} -> {:cont, {:ok, [{safe_to_atom(name), k_type} | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
     end)
+    |> case do
+      {:ok, results} -> {:ok, Enum.reverse(results)}
+      error -> error
+    end
   end
 
   def convert_billing_mode(raw_mode) do
-    raw_mode
-    |> String.downcase()
-    |> String.to_atom()
+    {:ok, raw_mode |> String.downcase() |> safe_to_atom()}
   end
 
   def convert_global_secondary_indexes(raw_indexes) when is_list(raw_indexes) do
-    Enum.map(raw_indexes, &convert_global_secondary_index/1)
+    {:ok, Enum.map(raw_indexes, &convert_global_secondary_index/1)}
   end
 
-  def convert_global_secondary_indexes(_), do: []
+  def convert_global_secondary_indexes(_), do: {:ok, []}
 
   defp attribute_type(type) do
-    Map.get(@attribute_type_map, type, normalize_to_atom(type))
+    case Map.fetch(@attribute_type_map, type) do
+      {:ok, attr_type} -> {:ok, attr_type}
+      :error -> {:error, {:unknown_attribute_type, type}}
+    end
   end
 
   defp key_type(type) do
-    Map.get(@key_type_map, type, normalize_to_atom(type))
+    case Map.fetch(@key_type_map, type) do
+      {:ok, k_type} -> {:ok, k_type}
+      :error -> {:error, {:unknown_key_type, type}}
+    end
   end
 
-  defp normalize_to_atom(value) do
-    value
-    |> String.downcase()
-    |> String.to_atom()
+  defp safe_to_atom(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError ->
+      Logger.warning("Creating new atom from migration", value: value)
+      String.to_atom(value)
   end
 
   def convert_global_secondary_index(%{index_name: index_name, key_schema: raw_key_schema} = raw) do

@@ -74,4 +74,22 @@ defmodule Pizza.Application.PizzaProjectionProcess do
 
     {:reply, pizza_projection_adapter.delete(client, id), state}
   end
+
+  @impl true
+  def handle_cast({:pizza_deleted, %CloudEvent{data: data}}, state) do
+    %{pizza_projection_adapter: pizza_projection_adapter, client: client} = state
+
+    pizza_projection_adapter.delete(client, data.pizza_id)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({_event_type, %CloudEvent{} = event}, state) do
+    %{pizza_projection_adapter: pizza_projection_adapter, client: client} = state
+
+    pizza_projection_adapter.save(client, event)
+
+    {:noreply, state}
+  end
 end

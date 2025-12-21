@@ -53,7 +53,7 @@ defmodule Pizza.Application do
 
   defp handle_command({:error, message}), do: message
 
-  defp dispatch({:save, attrs}), do: Dispatcher.save_pizza(attrs)
+  defp dispatch({:create, name, price}), do: Dispatcher.create_pizza(name, price)
   defp dispatch({:list, scope, order}), do: Dispatcher.list_pizzas(scope, order)
 
 end

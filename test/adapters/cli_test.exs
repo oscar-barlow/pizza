@@ -5,9 +5,9 @@ defmodule Pizza.Adapters.CliTest do
   alias Pizza.Core.Pizza
 
   describe "command parsing" do
-    test "parses save command with price" do
-      assert {:ok, {:save, %{name: "margherita", price: 7.5}}} =
-               Cli.parse(["save", "margherita", "7.5"])
+    test "parses create command with price" do
+      assert {:ok, {:create, "margherita", 7.5}} =
+               Cli.parse(["create", "margherita", "7.5"])
     end
 
     test "parses list command with defaults" do
@@ -19,7 +19,7 @@ defmodule Pizza.Adapters.CliTest do
     end
 
     test "rejects invalid price" do
-      assert {:error, "Price must be a number"} = Cli.parse(["save", "margherita", "abc"])
+      assert {:error, "Price must be a number"} = Cli.parse(["create", "margherita", "abc"])
     end
 
     test "passes through unknown scope" do
@@ -36,15 +36,15 @@ defmodule Pizza.Adapters.CliTest do
   end
 
   describe "formatting" do
-    test "formats save success" do
-      pizza = %Pizza{id: "1", name: "margherita", price: 7.5}
-      command = {:save, %{name: "margherita", price: 7.5}}
+    test "formats create success" do
+      pizza = %Pizza{id: "1", name: "margherita", price: 7.5, version: 0}
+      command = {:create, "margherita", 7.5}
 
-      assert "Saved pizza margherita (7.50)" == Cli.format({:ok, pizza}, command)
+      assert "Created pizza margherita (7.50)" == Cli.format({:ok, pizza}, command)
     end
 
-    test "formats save error" do
-      command = {:save, %{name: "margherita", price: 7.5}}
+    test "formats create error" do
+      command = {:create, "margherita", 7.5}
 
       assert "Invalid pizza attributes" == Cli.format({:error, :invalid_payload}, command)
     end
@@ -59,8 +59,8 @@ defmodule Pizza.Adapters.CliTest do
       command = {:list, :alphabetical, :asc}
 
       pizzas = [
-        %Pizza{id: "1", name: "margherita", price: 7.5},
-        %Pizza{id: "2", name: "funghi", price: 9.0}
+        %Pizza{id: "1", name: "margherita", price: 7.5, version: 0},
+        %Pizza{id: "2", name: "funghi", price: 9.0, version: 0}
       ]
 
       assert "margherita (7.50)\nfunghi (9.00)" == Cli.format({:ok, pizzas}, command)

@@ -1,21 +1,145 @@
 defmodule Pizza.Core.Pizza do
-  @enforce_keys [:id, :name, :price]
-  defstruct id: nil, name: nil, price: nil
+  @enforce_keys [:id, :name, :price, :version]
+  defstruct id: nil, name: nil, price: nil, version: 0, deleted: false
 
-  @type t :: %__MODULE__{id: String.t(), name: String.t(), price: float()}
+  alias Pizza.Events.{PizzaCreated, PriceChanged, PizzaRenamed, PizzaDeleted}
 
-  def new(name, price) do
-    case price > 0 do
-      true ->
-        id = get_id()
-        {:ok, %__MODULE__{id: id, name: name, price: price}}
+  @type t :: %__MODULE__{
+          id: String.t(),
+          name: String.t(),
+          price: float(),
+          version: integer(),
+          deleted: boolean()
+        }
+  @type domain_event :: PizzaCreated.t() | PriceChanged.t() | PizzaRenamed.t() | PizzaDeleted.t()
 
-      _ ->
-        {:error, :negative_price}
+  def new(name, price)
+      when is_binary(name) and byte_size(name) > 0 and is_number(price) and price > 0 do
+    id = UUID.uuid4()
+    version = 1
+
+    event = %PizzaCreated{
+      pizza_id: id,
+      name: name,
+      price: price,
+      occurred_at: DateTime.utc_now(),
+      version: version
+    }
+
+    {:ok, [event]}
+  end
+
+  def new("", _price), do: {:error, :empty_name}
+  def new(name, _price) when not is_binary(name), do: {:error, :invalid_name}
+  def new(_name, price) when is_number(price) and price <= 0, do: {:error, :negative_price}
+  def new(_name, _price), do: {:error, :invalid_price}
+
+  def change_price(%__MODULE__{} = pizza, new_price)
+      when is_number(new_price) and new_price > 0 do
+    with :ok <- validate_not_deleted(pizza),
+         :ok <- validate_price_change(pizza.price, new_price) do
+      next_version = pizza.version + 1
+
+      event = %PriceChanged{
+        pizza_id: pizza.id,
+        old_price: pizza.price,
+        new_price: new_price,
+        occurred_at: DateTime.utc_now(),
+        version: next_version
+      }
+
+      {:ok, [event]}
     end
   end
 
-  defp get_id() do
-    UUID.uuid4()
+  def change_price(%__MODULE__{}, price) when not is_number(price), do: {:error, :invalid_price}
+  def change_price(%__MODULE__{}, price) when price <= 0, do: {:error, :negative_price}
+
+  def rename(%__MODULE__{} = pizza, new_name)
+      when is_binary(new_name) and byte_size(new_name) > 0 do
+    with :ok <- validate_not_deleted(pizza) do
+      next_version = pizza.version + 1
+
+      event = %PizzaRenamed{
+        pizza_id: pizza.id,
+        old_name: pizza.name,
+        new_name: new_name,
+        occurred_at: DateTime.utc_now(),
+        version: next_version
+      }
+
+      {:ok, [event]}
+    end
+  end
+
+  def rename(%__MODULE__{}, ""), do: {:error, :empty_name}
+  def rename(%__MODULE__{}, name) when not is_binary(name), do: {:error, :invalid_name}
+
+  def delete(%__MODULE__{} = pizza) do
+    with :ok <- validate_not_deleted(pizza) do
+      next_version = pizza.version + 1
+
+      event = %PizzaDeleted{
+        pizza_id: pizza.id,
+        occurred_at: DateTime.utc_now(),
+        version: next_version
+      }
+
+      {:ok, [event]}
+    end
+  end
+
+  def from_history(events) when is_list(events) do
+    case reconstitute(events) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, pizza} -> {:ok, pizza}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp reconstitute(events) do
+    Enum.reduce_while(events, {:ok, nil}, fn event, {:ok, pizza} ->
+      case apply_event(event, pizza) do
+        {:ok, updated} -> {:cont, {:ok, updated}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp apply_event(%PizzaCreated{pizza_id: id, name: name, price: price, version: version}, nil) do
+    pizza = %__MODULE__{id: id, name: name, price: price, version: version, deleted: false}
+    {:ok, pizza}
+  end
+
+  defp apply_event(%PizzaCreated{}, %__MODULE__{}), do: {:error, :invalid_history}
+
+  defp apply_event(%PriceChanged{new_price: new_price, version: version}, %__MODULE__{} = pizza) do
+    {:ok, %{pizza | price: new_price, version: version}}
+  end
+
+  defp apply_event(%PizzaRenamed{new_name: new_name, version: version}, %__MODULE__{} = pizza) do
+    {:ok, %{pizza | name: new_name, version: version}}
+  end
+
+  defp apply_event(%PizzaDeleted{version: version}, %__MODULE__{} = pizza) do
+    {:ok, %{pizza | version: version, deleted: true}}
+  end
+
+  defp apply_event(_, _), do: {:error, :invalid_history}
+
+  defp validate_not_deleted(%__MODULE__{deleted: deleted}) do
+    case deleted do
+      true -> {:error, :pizza_deleted}
+      false -> :ok
+    end
+  end
+
+  defp validate_price_change(old_price, new_price) do
+    max_increase = old_price * 1.5
+
+    cond do
+      new_price > max_increase -> {:error, :price_increase_too_large}
+      true -> :ok
+    end
   end
 end

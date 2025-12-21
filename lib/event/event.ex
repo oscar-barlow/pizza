@@ -60,6 +60,10 @@ defmodule Pizza.Event do
       "#{aggregate_prefix}-#{id}"
     end
 
-    def stream_id_for(_), do: raise(ArgumentError, "cloud events require aggregates with id")
+    def stream_id_for(%{pizza_id: pizza_id}) do
+      "pizza-#{pizza_id}"
+    end
+
+    def stream_id_for(_), do: raise(ArgumentError, "cloud events require aggregates with id or pizza_id")
   end
 end
